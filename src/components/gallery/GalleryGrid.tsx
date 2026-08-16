@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Maximize2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { galleryDesigns, GALLERY_FILTERS } from "@/data/gallery";
 import { cn } from "@/lib/utils";
@@ -101,10 +101,7 @@ export function GalleryGrid({ limit }: { limit?: number }) {
       </div>
 
       <Dialog open={current !== null} onOpenChange={(open) => !open && setOpenIndex(null)}>
-        <DialogContent
-          showCloseButton={false}
-          className="max-w-4xl overflow-hidden border-none bg-transparent p-0 shadow-none"
-        >
+        <DialogContent className="max-w-4xl overflow-hidden border-none bg-transparent p-0 shadow-none">
           {current && (
             <div className="relative">
               <DialogTitle className="sr-only">{current.name}</DialogTitle>
@@ -117,14 +114,6 @@ export function GalleryGrid({ limit }: { limit?: number }) {
                 {current.name}
               </div>
 
-              <button
-                type="button"
-                onClick={() => setOpenIndex(null)}
-                aria-label="Close"
-                className="absolute right-3 top-3 grid h-11 w-11 place-items-center rounded-full bg-card/90 text-foreground transition-colors hover:bg-card"
-              >
-                <X className="h-5 w-5" />
-              </button>
               {filtered.length > 1 && (
                 <>
                   <button
