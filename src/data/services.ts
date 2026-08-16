@@ -83,7 +83,7 @@ export const services: Service[] = [
       "Cuticle oil",
     ],
     popular: true,
-    images: [galMilky, galFrench, svcGelMani],
+    images: [galFrench, galSage, galMilky],
   },
   {
     id: "acrylic-full-set",
@@ -180,7 +180,7 @@ export const services: Service[] = [
       "Hot towel",
       "Regular polish",
     ],
-    images: [galMilky, svcGelMani],
+    images: [galFloral, galFrench],
   },
   {
     id: "express-pedicure",
@@ -217,7 +217,7 @@ export const services: Service[] = [
     duration: 20,
     description: "Gentle soak-off removal that protects the natural nail.",
     includes: ["Gentle soak-off", "Careful buff", "Cuticle oil"],
-    images: [svcGelMani],
+    images: [galMilky],
   },
   {
     id: "dip-french",
