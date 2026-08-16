@@ -1,53 +1,9 @@
 import {
-  guestServiceLabel,
-  workingTechnicians,
+  technicianRows,
   type Appointment,
   type TechnicianShift,
-  type TechnicianState,
 } from "@/data/manager-mock";
 import { TechStateBadge } from "@/components/manager/StatusBadge";
-
-type Row = {
-  id: string;
-  name: string;
-  initials: string;
-  state: TechnicianState;
-  detail?: string;
-  startedAt?: string;
-};
-
-function buildRows(appointments: Appointment[], shifts: TechnicianShift[]): Row[] {
-  return workingTechnicians.map((technician) => {
-    const shift = shifts.find((item) => item.technicianId === technician.id);
-    let state: TechnicianState = shift?.state ?? "Available";
-
-    let detail: string | undefined;
-    let startedAt: string | undefined;
-
-    for (const appointment of appointments) {
-      const guest = appointment.guests.find(
-        (item) => item.technicianId === technician.id && item.status === "In Service",
-      );
-      if (guest) {
-        state = "In Service";
-        detail = `${guest.name} — ${guestServiceLabel(guest)}`;
-        startedAt = guest.startedAt;
-        break;
-      }
-    }
-
-    if (state === "In Service" && !detail) state = "Available";
-
-    return {
-      id: technician.id,
-      name: technician.name,
-      initials: technician.initials,
-      state,
-      ...(detail ? { detail } : {}),
-      ...(startedAt ? { startedAt } : {}),
-    };
-  });
-}
 
 export function TechnicianBoard({
   appointments,
@@ -56,7 +12,7 @@ export function TechnicianBoard({
   appointments: Appointment[];
   shifts: TechnicianShift[];
 }) {
-  const rows = buildRows(appointments, shifts);
+  const rows = technicianRows(appointments, shifts);
   const available = rows.filter((row) => row.state === "Available").length;
 
   return (

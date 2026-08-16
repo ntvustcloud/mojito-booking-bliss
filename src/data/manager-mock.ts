@@ -364,3 +364,46 @@ export const technicianShifts: TechnicianShift[] = [
   { technicianId: "tran", state: "Available" },
   { technicianId: "rosa", state: "Break" },
 ];
+
+export type TechnicianRow = {
+  id: string;
+  name: string;
+  initials: string;
+  state: TechnicianState;
+  detail?: string;
+  startedAt?: string;
+};
+
+/** Live technician state derived from today's appointments + shift state. */
+export function technicianRows(
+  appointments: Appointment[],
+  shifts: TechnicianShift[],
+): TechnicianRow[] {
+  return workingTechnicians.map((technician) => {
+    const shift = shifts.find((item) => item.technicianId === technician.id);
+    let state: TechnicianState = shift?.state === "In Service" ? "Available" : (shift?.state ?? "Available");
+    let detail: string | undefined;
+    let startedAt: string | undefined;
+
+    for (const appointment of appointments) {
+      const guest = appointment.guests.find(
+        (item) => item.technicianId === technician.id && item.status === "In Service",
+      );
+      if (guest) {
+        state = "In Service";
+        detail = `${guest.name} — ${guestServiceLabel(guest)}`;
+        startedAt = guest.startedAt;
+        break;
+      }
+    }
+
+    return {
+      id: technician.id,
+      name: technician.name,
+      initials: technician.initials,
+      state,
+      ...(detail ? { detail } : {}),
+      ...(startedAt ? { startedAt } : {}),
+    };
+  });
+}

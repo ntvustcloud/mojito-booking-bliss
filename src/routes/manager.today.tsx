@@ -21,6 +21,7 @@ import {
   appointmentStatus,
   appointmentTechnicianLabel,
   isGroup,
+  technicianRows,
   technicianShifts,
   todayAppointments,
   type Appointment,
@@ -71,7 +72,9 @@ function TodayBoard() {
       total: appointments.length,
       waiting: guests.filter((guest) => ["Waiting", "Checked In"].includes(guest.status)).length,
       inService: guests.filter((guest) => guest.status === "In Service").length,
-      availableTechs: technicianShifts.filter((shift) => shift.state === "Available").length,
+      availableTechs: technicianRows(appointments, technicianShifts).filter(
+        (row) => row.state === "Available",
+      ).length,
     };
   }, [appointments]);
 
