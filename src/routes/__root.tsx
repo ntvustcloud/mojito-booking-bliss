@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -125,6 +126,19 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const isManager = useRouterState({
+    select: (state) => state.location.pathname.startsWith("/manager"),
+  });
+
+  if (isManager) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        {/* Manager portal has its own shell — no customer header, footer or tray. */}
+        <Outlet />
+        <Toaster position="bottom-center" />
+      </QueryClientProvider>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
