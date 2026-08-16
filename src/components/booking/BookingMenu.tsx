@@ -11,7 +11,16 @@ const TABS = [
   ...menuGroups.map((g) => ({ id: g.id, label: g.label })),
 ];
 
-export function BookingMenu() {
+type BookingMenuProps = {
+  /** Heading shown above the menu. */
+  heading?: string;
+  description?: string;
+  /** Controlled mode: ids already chosen for the person being edited. */
+  selectedIds?: string[];
+  onToggle?: (id: string) => void;
+};
+
+export function BookingMenu({ heading, description, selectedIds, onToggle }: BookingMenuProps) {
   const [tab, setTab] = useState("all");
   const [query, setQuery] = useState("");
 
@@ -32,9 +41,9 @@ export function BookingMenu() {
     <section className="border-t border-border pt-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl">Full Salon Menu</h2>
+          <h2 className="text-2xl">{heading ?? "Full Salon Menu"}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Tap + to add a service straight to your appointment.
+            {description ?? "Tap + to add a service straight to your appointment."}
           </p>
         </div>
         <div className="relative w-full sm:w-64">
@@ -78,7 +87,12 @@ export function BookingMenu() {
               </h3>
               <ul className="mt-3 divide-y divide-border">
                 {group.services.map((service) => (
-                  <MenuRow key={service.id} service={service} />
+                  <MenuRow
+                    key={service.id}
+                    service={service}
+                    {...(selectedIds ? { added: selectedIds.includes(service.id) } : {})}
+                    {...(onToggle ? { onToggle } : {})}
+                  />
                 ))}
               </ul>
             </div>
@@ -89,9 +103,26 @@ export function BookingMenu() {
   );
 }
 
-function MenuRow({ service }: { service: Service }) {
+function MenuRow({
+  service,
+  added: addedProp,
+  onToggle,
+}: {
+  service: Service;
+  added?: boolean;
+  onToggle?: (id: string) => void;
+}) {
   const { hasService, addService, removeService } = useAppointment();
-  const added = hasService(service.id);
+  const added = addedProp ?? hasService(service.id);
+
+  const toggle = () => {
+    if (onToggle) {
+      onToggle(service.id);
+      return;
+    }
+    if (added) removeService(service.id);
+    else addService(service.id);
+  };
 
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3">
@@ -103,7 +134,7 @@ function MenuRow({ service }: { service: Service }) {
       </div>
       <button
         type="button"
-        onClick={() => (added ? removeService(service.id) : addService(service.id))}
+        onClick={toggle}
         aria-pressed={added}
         aria-label={added ? `Remove ${service.name}` : `Add ${service.name}`}
         className={cn(
