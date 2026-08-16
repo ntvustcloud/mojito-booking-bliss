@@ -57,7 +57,6 @@ function buildSlots(dayIndex: number, requiredDuration: number): Slot[] {
 export function BookingFlow() {
   const {
     selectedServices,
-    savedDesign,
     totalPrice,
     totalDuration,
     count,
@@ -383,23 +382,6 @@ export function BookingFlow() {
                   <br />
                   {details.email}
                 </ReviewRow>
-                <ReviewRow label="Nail inspiration">
-                  {savedDesign ? (
-                    <span className="inline-grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
-                      <img
-                        src={savedDesign.image}
-                        alt={savedDesign.name}
-                        width={48}
-                        height={48}
-                        loading="lazy"
-                        className="h-12 w-12 rounded-lg object-cover"
-                      />
-                      <span className="min-w-0">{savedDesign.name}</span>
-                    </span>
-                  ) : (
-                    "None saved"
-                  )}
-                </ReviewRow>
                 <ReviewRow label="Notes">{details.notes.trim() || "—"}</ReviewRow>
               </dl>
             </section>
@@ -456,22 +438,6 @@ export function BookingFlow() {
               <span className="font-bold">{formatDuration(totalDuration)}</span>
             </div>
           </div>
-          {savedDesign && (
-            <div className="mt-5 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 rounded-xl bg-card p-3">
-              <img
-                src={savedDesign.image}
-                alt={savedDesign.name}
-                width={48}
-                height={48}
-                loading="lazy"
-                className="h-12 w-12 rounded-lg object-cover"
-              />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-bold">{savedDesign.name}</p>
-                <p className="text-xs text-muted-foreground">Saved inspiration</p>
-              </div>
-            </div>
-          )}
         </div>
       </aside>
 
@@ -511,7 +477,7 @@ function Confirmation({
   time: string;
   onReset: () => void;
 }) {
-  const { selectedServices, savedDesign, totalPrice, totalDuration } = useAppointment();
+  const { selectedServices, totalPrice, totalDuration } = useAppointment();
 
   return (
     <div className="mx-auto max-w-2xl rounded-3xl border border-border bg-card p-8 text-center sm:p-12">
