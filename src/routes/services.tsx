@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ServiceCard } from "@/components/services/ServiceCard";
+import { FullMenuPreview } from "@/components/services/FullMenuPreview";
 import { SERVICE_CATEGORIES, services } from "@/data/services";
 
 const title = "Services & Prices — Mojito Nail Salon";
@@ -44,12 +45,14 @@ function ServicesPage() {
               </div>
               <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                 {items.map((service) => (
-                  <ServiceCard key={service.id} service={service} />
+                  <ServiceCard key={service.id} service={service} edgeToEdge />
                 ))}
               </div>
             </section>
           );
         })}
+
+        <FullMenuPreview />
       </div>
     </div>
   );
