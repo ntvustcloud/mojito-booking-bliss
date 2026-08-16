@@ -12,7 +12,7 @@ import { formatIncludes, formatServiceMeta, type Service } from "@/data/services
 import { cn } from "@/lib/utils";
 
 /** Gentle crossfading outcome imagery: static with one image, slideshow with 2–4. */
-function ServiceImages({ service, active }: { service: Service; active: boolean }) {
+function ServiceImages({ service, active, edgeToEdge }: { service: Service; active: boolean; edgeToEdge?: boolean }) {
   const images = service.images.slice(0, 4);
   const [index, setIndex] = useState(0);
 
@@ -30,7 +30,12 @@ function ServiceImages({ service, active }: { service: Service; active: boolean 
   }, [active]);
 
   return (
-    <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-secondary">
+    <div
+      className={cn(
+        "relative aspect-[4/3] overflow-hidden bg-secondary",
+        edgeToEdge ? "rounded-t-2xl" : "rounded-xl",
+      )}
+    >
       {images.map((image, imageIndex) => (
         <img
           key={image}
@@ -96,7 +101,7 @@ function AddControl({ service }: { service: Service }) {
   );
 }
 
-export function ServiceCard({ service }: { service: Service }) {
+export function ServiceCard({ service, edgeToEdge }: { service: Service; edgeToEdge?: boolean }) {
   const [hovered, setHovered] = useState(false);
   const { hasService } = useAppointment();
   const added = hasService(service.id);
@@ -106,13 +111,16 @@ export function ServiceCard({ service }: { service: Service }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className={cn(
-        "flex h-full flex-col rounded-2xl border bg-card p-3 transition-all duration-300 sm:p-4",
+        "flex h-full flex-col rounded-2xl border bg-card transition-all duration-300",
+        edgeToEdge ? "px-0 pb-3 pt-0 sm:pb-4" : "p-3 sm:p-4",
         added
           ? "border-primary/40 shadow-soft"
           : "border-border shadow-soft hover:-translate-y-0.5 hover:shadow-lift",
       )}
     >
-      <ServiceImages service={service} active={hovered} />
+      <ServiceImages service={service} active={hovered} edgeToEdge={edgeToEdge} />
+
+      <div className={cn(edgeToEdge && "px-3 sm:px-4")}>
 
       <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
         <h3 className="min-w-0 text-lg font-extrabold leading-snug">{service.name}</h3>
@@ -125,6 +133,7 @@ export function ServiceCard({ service }: { service: Service }) {
         <span className="font-bold text-foreground">Includes: </span>
         {formatIncludes(service)}.
       </p>
+      </div>
     </article>
   );
 }
