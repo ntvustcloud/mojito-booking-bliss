@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAppointment } from "@/state/appointment";
+import { BookingMenu } from "@/components/booking/BookingMenu";
 import { formatDuration, formatPrice } from "@/data/services";
 import { salon, technicians } from "@/data/salon";
 import { cn } from "@/lib/utils";
@@ -125,25 +126,6 @@ export function BookingFlow() {
     );
   }
 
-  if (count === 0) {
-    return (
-      <div className="rounded-3xl border border-border bg-card p-10 text-center">
-        <h2 className="text-2xl">Your appointment is empty</h2>
-        <p className="mx-auto mt-3 max-w-md text-muted-foreground">
-          Pick the services you'd like first — they'll be waiting for you here.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Button asChild size="lg">
-            <Link to="/services">Browse services</Link>
-          </Button>
-          <Button asChild size="lg" variant="outline">
-            <Link to="/gallery">See the gallery</Link>
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.6fr)]">
       <div>
@@ -177,6 +159,12 @@ export function BookingFlow() {
                 {count} {count === 1 ? "service" : "services"} · estimated{" "}
                 {formatPrice(totalPrice)} · about {formatDuration(totalDuration)}
               </p>
+              {count === 0 && (
+                <p className="mt-6 rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+                  Nothing selected yet — pick services from the menu below, or browse the Services
+                  page for photos and details.
+                </p>
+              )}
               <ul className="mt-6 space-y-3">
                 {selectedServices.map((service) => (
                   <li
@@ -193,18 +181,22 @@ export function BookingFlow() {
                       type="button"
                       onClick={() => removeService(service.id)}
                       aria-label={`Remove ${service.name}`}
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" /> Remove
                     </button>
                   </li>
                 ))}
               </ul>
               <Button asChild variant="outline" className="mt-6">
                 <Link to="/services">
-                  <Plus /> Add Additional Services
+                  <Plus /> Browse Our Services
                 </Link>
               </Button>
+
+              <div className="mt-8">
+                <BookingMenu />
+              </div>
             </section>
           )}
 
