@@ -3,7 +3,7 @@ import { GalleryGrid } from "@/components/gallery/GalleryGrid";
 
 const title = "Nail Design Gallery — Mojito Nail Salon";
 const description =
-  "Browse gel, acrylic, French, seasonal, minimal and pedicure nail designs. Save one design as inspiration for your appointment.";
+  "Browse real gel, acrylic, French, nail art, seasonal and pedicure sets finished at Mojito Nail Salon.";
 
 export const Route = createFileRoute("/gallery")({
   head: () => ({
@@ -22,10 +22,10 @@ function GalleryPage() {
     <div className="section-shell py-12 lg:py-16">
       <div className="max-w-2xl">
         <p className="eyebrow">Gallery</p>
-        <h1 className="mt-3 text-4xl sm:text-5xl">Find a look you love</h1>
+        <h1 className="mt-3 text-4xl sm:text-5xl">Our work</h1>
         <p className="mt-4 text-lg text-muted-foreground">
-          Save one design to your appointment as a visual reference — it never adds a charge on its
-          own, and your technician will talk it through with you.
+          A portfolio of real nail sets finished in our chairs. Tap any photo to see it larger — save
+          it to your phone or show it to your technician at your visit.
         </p>
       </div>
       <div className="mt-10">
