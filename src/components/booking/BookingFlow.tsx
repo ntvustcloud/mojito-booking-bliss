@@ -508,22 +508,6 @@ function Confirmation({
           <p className="font-bold">Technician</p>
           <p className="text-muted-foreground">{technicianName}</p>
         </div>
-        {savedDesign && (
-          <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
-            <img
-              src={savedDesign.image}
-              alt={savedDesign.name}
-              width={56}
-              height={56}
-              loading="lazy"
-              className="h-14 w-14 rounded-lg object-cover"
-            />
-            <div className="min-w-0">
-              <p className="font-bold">Saved design</p>
-              <p className="truncate text-muted-foreground">{savedDesign.name}</p>
-            </div>
-          </div>
-        )}
         <div>
           <p className="font-bold">{salon.name}</p>
           <p className="text-muted-foreground">{salon.address}</p>
