@@ -1,68 +1,130 @@
-import { useState } from "react";
-import { ChevronDown, Clock } from "lucide-react";
-import { AddServiceButton } from "@/components/site/AddServiceButton";
-import { formatDuration, formatPrice, type Service } from "@/data/services";
+import { useEffect, useState } from "react";
+import { Check, Plus } from "lucide-react";
+import { toast } from "sonner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAppointment } from "@/state/appointment";
+import { formatIncludes, formatServiceMeta, type Service } from "@/data/services";
 import { cn } from "@/lib/utils";
 
+/** Gentle crossfading outcome imagery: static with one image, slideshow with 2–4. */
+function ServiceImages({ service, active }: { service: Service; active: boolean }) {
+  const images = service.images.slice(0, 4);
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (!active || images.length < 2) return;
+    const timer = window.setInterval(
+      () => setIndex((value) => (value + 1) % images.length),
+      3200,
+    );
+    return () => window.clearInterval(timer);
+  }, [active, images.length]);
+
+  useEffect(() => {
+    if (!active) setIndex(0);
+  }, [active]);
+
+  return (
+    <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-secondary">
+      {images.map((image, imageIndex) => (
+        <img
+          key={image}
+          src={image}
+          alt={imageIndex === 0 ? `${service.name} result` : ""}
+          loading="lazy"
+          className={cn(
+            "absolute inset-0 h-full w-full object-cover transition-opacity duration-700",
+            imageIndex === index ? "opacity-100" : "opacity-0",
+          )}
+        />
+      ))}
+      {images.length > 1 && (
+        <div className="absolute bottom-2.5 left-1/2 flex -translate-x-1/2 gap-1.5">
+          {images.map((image, dotIndex) => (
+            <span
+              key={image}
+              aria-hidden
+              className={cn(
+                "h-1.5 w-1.5 rounded-full bg-cream transition-opacity duration-300",
+                dotIndex === index ? "opacity-95" : "opacity-45",
+              )}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AddControl({ service }: { service: Service }) {
+  const { hasService, addService } = useAppointment();
+  const added = hasService(service.id);
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-pressed={added}
+            aria-label={added ? `${service.name} added to appointment` : `Add ${service.name} to appointment`}
+            onClick={() => {
+              if (added) return;
+              addService(service.id);
+              toast.success(`${service.name} added`, {
+                description: "Keep exploring — your appointment is saved.",
+              });
+            }}
+            className={cn(
+              "grid h-11 w-11 shrink-0 place-items-center rounded-full border transition-colors duration-200",
+              added
+                ? "border-primary/40 bg-sage-soft text-sage-deep"
+                : "border-border bg-card text-primary hover:border-primary/50 hover:bg-secondary",
+            )}
+          >
+            {added ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="left">{added ? "Added" : "Add to Appointment"}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export function ServiceCard({ service }: { service: Service }) {
-  const [expanded, setExpanded] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const { hasService } = useAppointment();
   const added = hasService(service.id);
-  const includes = service.includes.slice(0, 6);
 
   return (
     <article
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       className={cn(
-        "group relative flex h-full flex-col rounded-2xl border bg-card p-5 transition-all duration-300",
-        added ? "border-primary/50 shadow-soft" : "border-border hover:border-primary/30 hover:shadow-lift",
+        "flex h-full flex-col rounded-2xl border bg-card p-3 transition-all duration-300 sm:p-4",
+        added
+          ? "border-primary/40 shadow-soft"
+          : "border-border shadow-soft hover:-translate-y-0.5 hover:shadow-lift",
       )}
     >
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+      <ServiceImages service={service} active={hovered} />
+
+      <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
         <h3 className="min-w-0 text-lg font-extrabold leading-snug">{service.name}</h3>
-        <span className="shrink-0 rounded-full bg-secondary px-3 py-1 text-sm font-bold text-secondary-foreground">
-          {formatPrice(service.price)}
-        </span>
+        <AddControl service={service} />
       </div>
 
-      <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
-        <Clock className="h-3.5 w-3.5" /> {formatDuration(service.duration)}
+      <p className="mt-1 text-sm font-semibold text-primary">{formatServiceMeta(service)}</p>
+      <p className="mt-2 text-sm text-muted-foreground">{service.description}</p>
+      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+        <span className="font-bold text-foreground">Includes: </span>
+        {formatIncludes(service)}.
       </p>
-      <p className="mt-3 text-sm text-muted-foreground">{service.description}</p>
-
-      {/* Desktop: reveal on hover. Mobile: tap to expand. Height is reserved so cards never jump. */}
-      <div
-        className={cn(
-          "grid overflow-hidden transition-all duration-300 lg:grid-rows-[0fr] lg:opacity-0 lg:group-hover:grid-rows-[1fr] lg:group-hover:opacity-100",
-          expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
-        )}
-      >
-        <div className="min-h-0">
-          <ul className="mt-4 space-y-1.5 border-t border-border pt-4 text-sm text-muted-foreground">
-            {includes.map((item) => (
-              <li key={item} className="flex gap-2">
-                <span aria-hidden className="text-primary">
-                  ·
-                </span>
-                {item}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
-      <div className="mt-5 flex flex-wrap items-center gap-3 pt-1">
-        <AddServiceButton service={service} />
-        <button
-          type="button"
-          onClick={() => setExpanded((value) => !value)}
-          aria-expanded={expanded}
-          className="inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground lg:hidden"
-        >
-          What's Included
-          <ChevronDown className={cn("h-4 w-4 transition-transform", expanded && "rotate-180")} />
-        </button>
-      </div>
     </article>
   );
 }
