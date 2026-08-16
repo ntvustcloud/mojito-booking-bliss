@@ -16,7 +16,7 @@ export function PopularMenu() {
 
       <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {homepageServices.map((service) => (
-          <ServiceCard key={service.id} service={service} />
+          <ServiceCard key={service.id} service={service} edgeToEdge />
         ))}
       </div>
 
