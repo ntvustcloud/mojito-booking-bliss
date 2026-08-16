@@ -1,27 +1,15 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ArrowRight, ShoppingBag, Sparkles, Trash2 } from "lucide-react";
+import { ArrowRight, ShoppingBag, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Separator } from "@/components/ui/separator";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAppointment } from "@/state/appointment";
-import { formatDuration, formatPrice, getService } from "@/data/services";
-import { toast } from "sonner";
+import { formatDuration, formatPrice } from "@/data/services";
 
 function TrayBody({ onClose }: { onClose: () => void }) {
-  const {
-    selectedServices,
-    savedDesign,
-    totalPrice,
-    totalDuration,
-    removeService,
-    removeDesign,
-    addService,
-    hasService,
-  } = useAppointment();
-
-  const nailArt = getService("nail-art-simple");
+  const { selectedServices, totalPrice, totalDuration, removeService } = useAppointment();
 
   return (
     <div className="flex h-full flex-col">
@@ -58,71 +46,6 @@ function TrayBody({ onClose }: { onClose: () => void }) {
                 </li>
               ))}
             </ul>
-          )}
-        </section>
-
-        <section>
-          <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-muted-foreground">
-            Nail inspiration
-          </h3>
-          {savedDesign ? (
-            <div className="mt-3 space-y-3 rounded-xl border border-border bg-card p-3">
-              <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
-                <img
-                  src={savedDesign.image}
-                  alt={savedDesign.name}
-                  width={64}
-                  height={64}
-                  loading="lazy"
-                  className="h-16 w-16 shrink-0 rounded-lg object-cover"
-                />
-                <div className="min-w-0">
-                  <p className="truncate font-bold">{savedDesign.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {savedDesign.category} · visual reference only
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button asChild size="sm" variant="outline">
-                  <Link to="/gallery" onClick={onClose}>
-                    Change
-                  </Link>
-                </Button>
-                <Button size="sm" variant="ghost" onClick={removeDesign}>
-                  Remove
-                </Button>
-              </div>
-              {savedDesign.suggestsNailArt && nailArt && (
-                <div className="rounded-lg bg-secondary/70 p-3 text-sm">
-                  <p className="flex items-start gap-2 text-secondary-foreground">
-                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
-                    This design may require a Nail Art add-on.
-                  </p>
-                  {!hasService(nailArt.id) && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-2"
-                      onClick={() => {
-                        addService(nailArt.id);
-                        toast.success(`${nailArt.name} added`);
-                      }}
-                    >
-                      Add Nail Art
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-muted-foreground">
-              No design saved yet.{" "}
-              <Link to="/gallery" onClick={onClose} className="font-semibold text-primary underline">
-                Browse the gallery
-              </Link>
-              .
-            </p>
           )}
         </section>
       </div>
@@ -181,9 +104,7 @@ export function AppointmentTray() {
               className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 text-left"
             >
               <span className="min-w-0">
-                <span className="block truncate text-sm font-bold">
-                  Your Appointment · {count}
-                </span>
+                <span className="block truncate text-sm font-bold">Your Appointment · {count}</span>
                 <span className="block text-xs text-muted-foreground">
                   Estimated {formatPrice(totalPrice)}
                 </span>

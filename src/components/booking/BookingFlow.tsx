@@ -17,13 +17,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useAppointment } from "@/state/appointment";
+import { BookingMenu } from "@/components/booking/BookingMenu";
 import { formatDuration, formatPrice } from "@/data/services";
 import { salon, technicians } from "@/data/salon";
 import { cn } from "@/lib/utils";
@@ -55,15 +51,8 @@ function buildSlots(dayIndex: number, requiredDuration: number): Slot[] {
 }
 
 export function BookingFlow() {
-  const {
-    selectedServices,
-    savedDesign,
-    totalPrice,
-    totalDuration,
-    count,
-    removeService,
-    clearAll,
-  } = useAppointment();
+  const { selectedServices, totalPrice, totalDuration, count, removeService, clearAll } =
+    useAppointment();
 
   const [step, setStep] = useState(0);
   const [technicianId, setTechnicianId] = useState("any");
@@ -101,13 +90,7 @@ export function BookingFlow() {
     details.phone.trim().length >= 7 &&
     /.+@.+\..+/.test(details.email);
 
-  const canContinue = [
-    count > 0,
-    Boolean(technicianId),
-    Boolean(time),
-    detailsValid,
-    true,
-  ][step];
+  const canContinue = [count > 0, Boolean(technicianId), Boolean(time), detailsValid, true][step];
 
   if (confirmed) {
     return (
@@ -123,25 +106,6 @@ export function BookingFlow() {
           setDetails({ name: "", phone: "", email: "", notes: "" });
         }}
       />
-    );
-  }
-
-  if (count === 0) {
-    return (
-      <div className="rounded-3xl border border-border bg-card p-10 text-center">
-        <h2 className="text-2xl">Your appointment is empty</h2>
-        <p className="mx-auto mt-3 max-w-md text-muted-foreground">
-          Pick the services you'd like first — they'll be waiting for you here.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Button asChild size="lg">
-            <Link to="/services">Browse services</Link>
-          </Button>
-          <Button asChild size="lg" variant="outline">
-            <Link to="/gallery">See the gallery</Link>
-          </Button>
-        </div>
-      </div>
     );
   }
 
@@ -175,9 +139,15 @@ export function BookingFlow() {
             <section className="fade-soft">
               <h2 className="text-2xl">Your Services</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                {count} {count === 1 ? "service" : "services"} · estimated{" "}
-                {formatPrice(totalPrice)} · about {formatDuration(totalDuration)}
+                {count} {count === 1 ? "service" : "services"} · estimated {formatPrice(totalPrice)}{" "}
+                · about {formatDuration(totalDuration)}
               </p>
+              {count === 0 && (
+                <p className="mt-6 rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+                  Nothing selected yet — pick services from the menu below, or browse the Services
+                  page for photos and details.
+                </p>
+              )}
               <ul className="mt-6 space-y-3">
                 {selectedServices.map((service) => (
                   <li
@@ -194,18 +164,22 @@ export function BookingFlow() {
                       type="button"
                       onClick={() => removeService(service.id)}
                       aria-label={`Remove ${service.name}`}
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" /> Remove
                     </button>
                   </li>
                 ))}
               </ul>
               <Button asChild variant="outline" className="mt-6">
                 <Link to="/services">
-                  <Plus /> Add Additional Services
+                  <Plus /> Browse Our Services
                 </Link>
               </Button>
+
+              <div className="mt-8">
+                <BookingMenu />
+              </div>
             </section>
           )}
 
@@ -383,23 +357,6 @@ export function BookingFlow() {
                   <br />
                   {details.email}
                 </ReviewRow>
-                <ReviewRow label="Nail inspiration">
-                  {savedDesign ? (
-                    <span className="inline-grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
-                      <img
-                        src={savedDesign.image}
-                        alt={savedDesign.name}
-                        width={48}
-                        height={48}
-                        loading="lazy"
-                        className="h-12 w-12 rounded-lg object-cover"
-                      />
-                      <span className="min-w-0">{savedDesign.name}</span>
-                    </span>
-                  ) : (
-                    "None saved"
-                  )}
-                </ReviewRow>
                 <ReviewRow label="Notes">{details.notes.trim() || "—"}</ReviewRow>
               </dl>
             </section>
@@ -456,22 +413,6 @@ export function BookingFlow() {
               <span className="font-bold">{formatDuration(totalDuration)}</span>
             </div>
           </div>
-          {savedDesign && (
-            <div className="mt-5 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 rounded-xl bg-card p-3">
-              <img
-                src={savedDesign.image}
-                alt={savedDesign.name}
-                width={48}
-                height={48}
-                loading="lazy"
-                className="h-12 w-12 rounded-lg object-cover"
-              />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-bold">{savedDesign.name}</p>
-                <p className="text-xs text-muted-foreground">Saved inspiration</p>
-              </div>
-            </div>
-          )}
         </div>
       </aside>
 
@@ -479,8 +420,8 @@ export function BookingFlow() {
         <DialogContent className="max-w-md">
           <DialogTitle className="text-xl">Group Booking</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            Group Booking is coming soon. For two or more guests, please call us at {salon.phone} and
-            we'll arrange chairs side by side.
+            Group Booking is coming soon. For two or more guests, please call us at {salon.phone}{" "}
+            and we'll arrange chairs side by side.
           </DialogDescription>
           <Button className="mt-2" onClick={() => setGroupOpen(false)}>
             Got it
@@ -511,7 +452,7 @@ function Confirmation({
   time: string;
   onReset: () => void;
 }) {
-  const { selectedServices, savedDesign, totalPrice, totalDuration } = useAppointment();
+  const { selectedServices, totalPrice, totalDuration } = useAppointment();
 
   return (
     <div className="mx-auto max-w-2xl rounded-3xl border border-border bg-card p-8 text-center sm:p-12">
@@ -542,22 +483,6 @@ function Confirmation({
           <p className="font-bold">Technician</p>
           <p className="text-muted-foreground">{technicianName}</p>
         </div>
-        {savedDesign && (
-          <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
-            <img
-              src={savedDesign.image}
-              alt={savedDesign.name}
-              width={56}
-              height={56}
-              loading="lazy"
-              className="h-14 w-14 rounded-lg object-cover"
-            />
-            <div className="min-w-0">
-              <p className="font-bold">Saved design</p>
-              <p className="truncate text-muted-foreground">{savedDesign.name}</p>
-            </div>
-          </div>
-        )}
         <div>
           <p className="font-bold">{salon.name}</p>
           <p className="text-muted-foreground">{salon.address}</p>
