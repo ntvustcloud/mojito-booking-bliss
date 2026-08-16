@@ -7,13 +7,7 @@ import galFloral from "@/assets/gal-floral-art.jpg";
 import galPedi from "@/assets/gal-pedi.jpg";
 import galGelx from "@/assets/gal-gelx-line.jpg";
 
-export type GalleryFilter =
-  | "Gel"
-  | "Acrylic"
-  | "French"
-  | "Nail Art"
-  | "Seasonal"
-  | "Pedicure";
+export type GalleryFilter = "Gel" | "Acrylic" | "French" | "Nail Art" | "Seasonal" | "Pedicure";
 
 export type GalleryDesign = {
   id: string;
@@ -93,8 +87,7 @@ export const galleryDesigns: GalleryDesign[] = [
     id: "gelx-fine-line",
     name: "Gel-X Fine Line",
     category: "Gel",
-    description:
-      "Translucent nude Gel-X with one whisper-thin line for a subtle bit of structure.",
+    description: "Translucent nude Gel-X with one whisper-thin line for a subtle bit of structure.",
     image: galGelx,
   },
 ];

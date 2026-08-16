@@ -62,10 +62,7 @@ export function GalleryGrid({ limit }: { limit?: number }) {
       )}
 
       <div
-        className={cn(
-          "grid gap-5 sm:grid-cols-2 lg:grid-cols-3",
-          limit === undefined && "mt-8",
-        )}
+        className={cn("grid gap-5 sm:grid-cols-2 lg:grid-cols-3", limit === undefined && "mt-8")}
       >
         {filtered.map((design, index) => (
           <figure

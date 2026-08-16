@@ -17,12 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useAppointment } from "@/state/appointment";
 import { BookingMenu } from "@/components/booking/BookingMenu";
 import { formatDuration, formatPrice } from "@/data/services";
@@ -56,14 +51,8 @@ function buildSlots(dayIndex: number, requiredDuration: number): Slot[] {
 }
 
 export function BookingFlow() {
-  const {
-    selectedServices,
-    totalPrice,
-    totalDuration,
-    count,
-    removeService,
-    clearAll,
-  } = useAppointment();
+  const { selectedServices, totalPrice, totalDuration, count, removeService, clearAll } =
+    useAppointment();
 
   const [step, setStep] = useState(0);
   const [technicianId, setTechnicianId] = useState("any");
@@ -101,13 +90,7 @@ export function BookingFlow() {
     details.phone.trim().length >= 7 &&
     /.+@.+\..+/.test(details.email);
 
-  const canContinue = [
-    count > 0,
-    Boolean(technicianId),
-    Boolean(time),
-    detailsValid,
-    true,
-  ][step];
+  const canContinue = [count > 0, Boolean(technicianId), Boolean(time), detailsValid, true][step];
 
   if (confirmed) {
     return (
@@ -156,8 +139,8 @@ export function BookingFlow() {
             <section className="fade-soft">
               <h2 className="text-2xl">Your Services</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                {count} {count === 1 ? "service" : "services"} · estimated{" "}
-                {formatPrice(totalPrice)} · about {formatDuration(totalDuration)}
+                {count} {count === 1 ? "service" : "services"} · estimated {formatPrice(totalPrice)}{" "}
+                · about {formatDuration(totalDuration)}
               </p>
               {count === 0 && (
                 <p className="mt-6 rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
@@ -437,8 +420,8 @@ export function BookingFlow() {
         <DialogContent className="max-w-md">
           <DialogTitle className="text-xl">Group Booking</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            Group Booking is coming soon. For two or more guests, please call us at {salon.phone} and
-            we'll arrange chairs side by side.
+            Group Booking is coming soon. For two or more guests, please call us at {salon.phone}{" "}
+            and we'll arrange chairs side by side.
           </DialogDescription>
           <Button className="mt-2" onClick={() => setGroupOpen(false)}>
             Got it

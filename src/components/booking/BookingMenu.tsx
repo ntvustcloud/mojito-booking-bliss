@@ -6,7 +6,10 @@ import { formatDuration, formatPrice, type Service } from "@/data/services";
 import { useAppointment } from "@/state/appointment";
 import { cn } from "@/lib/utils";
 
-const TABS = [{ id: "all", label: "All" }, ...menuGroups.map((g) => ({ id: g.id, label: g.label }))];
+const TABS = [
+  { id: "all", label: "All" },
+  ...menuGroups.map((g) => ({ id: g.id, label: g.label })),
+];
 
 export function BookingMenu() {
   const [tab, setTab] = useState("all");

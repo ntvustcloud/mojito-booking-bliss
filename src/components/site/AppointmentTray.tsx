@@ -48,7 +48,6 @@ function TrayBody({ onClose }: { onClose: () => void }) {
             </ul>
           )}
         </section>
-
       </div>
 
       <div className="space-y-4 border-t border-border pt-4">
@@ -105,9 +104,7 @@ export function AppointmentTray() {
               className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 text-left"
             >
               <span className="min-w-0">
-                <span className="block truncate text-sm font-bold">
-                  Your Appointment · {count}
-                </span>
+                <span className="block truncate text-sm font-bold">Your Appointment · {count}</span>
                 <span className="block text-xs text-muted-foreground">
                   Estimated {formatPrice(totalPrice)}
                 </span>
