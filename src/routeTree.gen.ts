@@ -13,7 +13,9 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as BookRouteImport } from './routes/book'
 import { Route as GalleryRouteImport } from './routes/gallery'
+import { Route as ManagerRouteImport } from './routes/manager'
 import { Route as ServicesRouteImport } from './routes/services'
+import { Route as ManagerIndexRouteImport } from './routes/manager.index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -35,10 +37,20 @@ const GalleryRoute = GalleryRouteImport.update({
   path: '/gallery',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManagerRoute = ManagerRouteImport.update({
+  id: '/manager',
+  path: '/manager',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ServicesRoute = ServicesRouteImport.update({
   id: '/services',
   path: '/services',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ManagerIndexRoute = ManagerIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ManagerRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -46,7 +58,9 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/book': typeof BookRoute
   '/gallery': typeof GalleryRoute
+  '/manager': typeof ManagerRouteWithChildren
   '/services': typeof ServicesRoute
+  '/manager/': typeof ManagerIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -54,6 +68,7 @@ export interface FileRoutesByTo {
   '/book': typeof BookRoute
   '/gallery': typeof GalleryRoute
   '/services': typeof ServicesRoute
+  '/manager': typeof ManagerIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -61,14 +76,31 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/book': typeof BookRoute
   '/gallery': typeof GalleryRoute
+  '/manager': typeof ManagerRouteWithChildren
   '/services': typeof ServicesRoute
+  '/manager/': typeof ManagerIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/book' | '/gallery' | '/services'
+  fullPaths:
+    | '/'
+    | '/about'
+    | '/book'
+    | '/gallery'
+    | '/manager'
+    | '/services'
+    | '/manager/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/book' | '/gallery' | '/services'
-  id: '__root__' | '/' | '/about' | '/book' | '/gallery' | '/services'
+  to: '/' | '/about' | '/book' | '/gallery' | '/services' | '/manager'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/book'
+    | '/gallery'
+    | '/manager'
+    | '/services'
+    | '/manager/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -76,6 +108,7 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   BookRoute: typeof BookRoute
   GalleryRoute: typeof GalleryRoute
+  ManagerRoute: typeof ManagerRouteWithChildren
   ServicesRoute: typeof ServicesRoute
 }
 
@@ -109,6 +142,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GalleryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manager': {
+      id: '/manager'
+      path: '/manager'
+      fullPath: '/manager'
+      preLoaderRoute: typeof ManagerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/services': {
       id: '/services'
       path: '/services'
@@ -116,14 +156,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServicesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manager/': {
+      id: '/manager/'
+      path: '/'
+      fullPath: '/manager/'
+      preLoaderRoute: typeof ManagerIndexRouteImport
+      parentRoute: typeof ManagerRoute
+    }
   }
 }
+
+interface ManagerRouteChildren {
+  ManagerIndexRoute: typeof ManagerIndexRoute
+}
+
+const ManagerRouteChildren: ManagerRouteChildren = {
+  ManagerIndexRoute: ManagerIndexRoute,
+}
+
+const ManagerRouteWithChildren =
+  ManagerRoute._addFileChildren(ManagerRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   BookRoute: BookRoute,
   GalleryRoute: GalleryRoute,
+  ManagerRoute: ManagerRouteWithChildren,
   ServicesRoute: ServicesRoute,
 }
 export const routeTree = rootRouteImport
