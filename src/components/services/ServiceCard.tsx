@@ -12,7 +12,7 @@ import { formatIncludes, formatServiceMeta, type Service } from "@/data/services
 import { cn } from "@/lib/utils";
 
 /** Gentle crossfading outcome imagery: static with one image, slideshow with 2–4. */
-function ServiceImages({ service, active, edgeToEdge }: { service: Service; active: boolean; edgeToEdge?: boolean }) {
+function ServiceImages({ service, active, edgeToEdge }: { service: Service; active: boolean; edgeToEdge?: boolean | undefined }) {
   const images = service.images.slice(0, 4);
   const [index, setIndex] = useState(0);
 
