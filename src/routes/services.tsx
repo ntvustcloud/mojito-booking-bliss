@@ -42,7 +42,7 @@ function ServicesPage() {
                   {items.length} {items.length === 1 ? "service" : "services"}
                 </span>
               </div>
-              <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                 {items.map((service) => (
                   <ServiceCard key={service.id} service={service} />
                 ))}

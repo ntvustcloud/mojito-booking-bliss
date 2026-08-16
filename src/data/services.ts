@@ -1,9 +1,16 @@
 import svcPedicure from "@/assets/svc-pedicure.jpg";
-import svcGelMani from "@/assets/svc-gel-mani.jpg";
 import svcDeluxePedi from "@/assets/svc-deluxe-pedi.jpg";
 import svcDip from "@/assets/svc-dip.jpg";
 import svcAcrylic from "@/assets/svc-acrylic.jpg";
 import svcGelx from "@/assets/svc-gelx.jpg";
+import galFrench from "@/assets/gal-french.jpg";
+import galSage from "@/assets/gal-sage-leaf.jpg";
+import galMilky from "@/assets/gal-milky.jpg";
+import galAcrylicTaupe from "@/assets/gal-acrylic-taupe.jpg";
+import galSeasonal from "@/assets/gal-seasonal.jpg";
+import galFloral from "@/assets/gal-floral-art.jpg";
+import galPedi from "@/assets/gal-pedi.jpg";
+import galGelxLine from "@/assets/gal-gelx-line.jpg";
 
 export type ServiceCategory =
   | "Manicure"
@@ -24,8 +31,8 @@ export type Service = {
   description: string;
   includes: string[];
   popular?: boolean;
-  /** Placeholder media for the Service Story panel — swap for real photo/video later. */
-  media?: string;
+  /** Finished-outcome imagery. One image renders static, 2–4 render as a gentle slideshow. */
+  images: string[];
 };
 
 export const SERVICE_CATEGORIES: ServiceCategory[] = [
@@ -46,18 +53,18 @@ export const services: Service[] = [
     category: "Pedicure",
     price: 55,
     duration: 50,
-    description:
-      "Our most-loved pedicure. A warm soak, careful nail work and a calming leg massage to reset your week.",
+    description: "Relaxing foot care with exfoliation, hydration and a calming massage.",
     includes: [
-      "Warm herbal soak",
-      "Nail shaping & cuticle care",
+      "Nail shaping",
+      "Cuticle care",
       "Callus treatment",
-      "Sugar scrub & massage",
-      "Hot towel wrap",
-      "Polish of your choice",
+      "Sugar scrub",
+      "Massage",
+      "Hot towel",
+      "Polish",
     ],
     popular: true,
-    media: svcPedicure,
+    images: [galPedi, svcPedicure],
   },
   {
     id: "gel-manicure",
@@ -65,54 +72,17 @@ export const services: Service[] = [
     category: "Gel",
     price: 45,
     duration: 45,
-    description:
-      "A glossy, chip-resistant finish that stays fresh for two to three weeks with gentle, careful prep.",
+    description: "Glossy, chip-resistant colour that stays fresh for two to three weeks.",
     includes: [
-      "Nail shaping & cuticle care",
-      "Buff & gentle prep",
-      "Gel color application",
-      "Cured shine top coat",
-      "Cuticle oil finish",
+      "Nail shaping",
+      "Cuticle care",
+      "Gentle prep",
+      "Gel colour",
+      "Shine top coat",
+      "Cuticle oil",
     ],
     popular: true,
-    media: svcGelMani,
-  },
-  {
-    id: "deluxe-pedicure",
-    name: "Deluxe Pedicure",
-    category: "Pedicure",
-    price: 75,
-    duration: 70,
-    description:
-      "The longer, slower version of our signature ritual, with a clay mask and extended massage.",
-    includes: [
-      "Extended herbal soak",
-      "Sea salt scrub",
-      "Clay foot mask",
-      "Extended leg massage",
-      "Hot towel wrap",
-      "Polish of your choice",
-    ],
-    popular: true,
-    media: svcDeluxePedi,
-  },
-  {
-    id: "dip-powder",
-    name: "Dip Powder",
-    category: "Dip Powder",
-    price: 55,
-    duration: 55,
-    description:
-      "Lightweight, durable color with a smooth finish — a lovely option for natural nails that need strength.",
-    includes: [
-      "Nail shaping & cuticle care",
-      "Dip color layering",
-      "Sealed & buffed finish",
-      "Strengthening top coat",
-      "Cuticle oil finish",
-    ],
-    popular: true,
-    media: svcDip,
+    images: [galFrench, galSage, galMilky],
   },
   {
     id: "acrylic-full-set",
@@ -120,17 +90,51 @@ export const services: Service[] = [
     category: "Acrylic",
     price: 70,
     duration: 75,
-    description:
-      "Sculpted length and shape built to last, finished exactly the way you like it — short, almond or square.",
+    description: "Sculpted length and shape built to last, finished exactly how you like it.",
     includes: [
-      "Length & shape consultation",
-      "Full acrylic sculpting",
-      "Hand filing & shaping",
-      "Regular or gel color",
-      "Cuticle oil finish",
+      "Shape consultation",
+      "Full sculpting",
+      "Hand filing",
+      "Regular or gel colour",
+      "Cuticle oil",
     ],
     popular: true,
-    media: svcAcrylic,
+    images: [galAcrylicTaupe, svcAcrylic],
+  },
+  {
+    id: "deluxe-pedicure",
+    name: "Deluxe Pedicure",
+    category: "Pedicure",
+    price: 75,
+    duration: 70,
+    description: "A longer, slower ritual with a clay mask and extended leg massage.",
+    includes: [
+      "Herbal soak",
+      "Sea salt scrub",
+      "Clay mask",
+      "Extended massage",
+      "Hot towel",
+      "Polish",
+    ],
+    popular: true,
+    images: [svcDeluxePedi, galPedi],
+  },
+  {
+    id: "dip-powder",
+    name: "Dip Powder",
+    category: "Dip Powder",
+    price: 55,
+    duration: 55,
+    description: "Lightweight, durable colour with a smooth finish and added strength.",
+    includes: [
+      "Nail shaping",
+      "Cuticle care",
+      "Dip colour layering",
+      "Sealed finish",
+      "Strengthening top coat",
+    ],
+    popular: true,
+    images: [galSage, svcDip],
   },
   {
     id: "gel-x-full-set",
@@ -138,17 +142,16 @@ export const services: Service[] = [
     category: "Gel-X",
     price: 80,
     duration: 80,
-    description:
-      "Soft gel extensions applied without filing your natural nail — light, flexible and beautifully natural.",
+    description: "Soft gel extensions applied without filing — light, flexible and natural.",
     includes: [
       "Nail prep & sizing",
-      "Soft gel extension tips",
+      "Soft gel tips",
       "Custom shaping",
-      "Gel color or clean natural finish",
-      "Cuticle oil finish",
+      "Gel colour",
+      "Cuticle oil",
     ],
     popular: true,
-    media: svcGelx,
+    images: [galGelxLine, svcGelx],
   },
 
   {
@@ -158,12 +161,8 @@ export const services: Service[] = [
     price: 30,
     duration: 30,
     description: "A tidy, refreshing reset for your hands with regular polish.",
-    includes: [
-      "Nail shaping & cuticle care",
-      "Gentle buff",
-      "Hand massage",
-      "Regular polish",
-    ],
+    includes: ["Nail shaping", "Cuticle care", "Gentle buff", "Hand massage", "Regular polish"],
+    images: [galFrench],
   },
   {
     id: "spa-manicure",
@@ -173,12 +172,14 @@ export const services: Service[] = [
     duration: 45,
     description: "Our classic manicure with a sugar scrub and hot towel treatment.",
     includes: [
-      "Nail shaping & cuticle care",
+      "Nail shaping",
+      "Cuticle care",
       "Sugar scrub",
-      "Extended hand massage",
-      "Hot towel wrap",
+      "Extended massage",
+      "Hot towel",
       "Regular polish",
     ],
+    images: [galFloral, galFrench],
   },
   {
     id: "express-pedicure",
@@ -186,8 +187,9 @@ export const services: Service[] = [
     category: "Pedicure",
     price: 38,
     duration: 35,
-    description: "A quick, clean tidy-up when you are short on time.",
+    description: "A quick, clean tidy-up for toes when you are short on time.",
     includes: ["Warm soak", "Nail shaping", "Light callus care", "Regular polish"],
+    images: [galPedi],
   },
   {
     id: "gel-pedicure",
@@ -195,14 +197,16 @@ export const services: Service[] = [
     category: "Gel",
     price: 62,
     duration: 60,
-    description: "Signature pedicure care finished with long-wearing gel color.",
+    description: "Signature pedicure care finished with long-wearing gel colour.",
     includes: [
-      "Warm herbal soak",
-      "Nail shaping & cuticle care",
+      "Herbal soak",
+      "Nail shaping",
+      "Cuticle care",
       "Callus treatment",
-      "Relaxing massage",
-      "Gel color application",
+      "Massage",
+      "Gel colour",
     ],
+    images: [galPedi, svcPedicure],
   },
   {
     id: "gel-removal",
@@ -211,7 +215,8 @@ export const services: Service[] = [
     price: 15,
     duration: 20,
     description: "Gentle soak-off removal that protects the natural nail.",
-    includes: ["Gentle soak-off", "Careful buff", "Nourishing cuticle oil"],
+    includes: ["Gentle soak-off", "Careful buff", "Cuticle oil"],
+    images: [galMilky],
   },
   {
     id: "dip-french",
@@ -219,13 +224,15 @@ export const services: Service[] = [
     category: "Dip Powder",
     price: 68,
     duration: 65,
-    description: "Hand-drawn French line in dip powder for a crisp, lasting finish.",
+    description: "A hand-drawn French line in dip powder for a crisp, lasting finish.",
     includes: [
-      "Nail shaping & cuticle care",
-      "Dip color layering",
+      "Nail shaping",
+      "Cuticle care",
+      "Dip colour layering",
       "Hand-drawn French line",
-      "Sealed & buffed finish",
+      "Sealed finish",
     ],
+    images: [galFrench, svcDip],
   },
   {
     id: "acrylic-fill",
@@ -234,7 +241,8 @@ export const services: Service[] = [
     price: 52,
     duration: 55,
     description: "Keep your set looking new with a careful rebalance and refill.",
-    includes: ["Rebalance & refill", "Reshaping", "Color reapplication", "Cuticle care"],
+    includes: ["Rebalance & refill", "Reshaping", "Colour reapplication", "Cuticle care"],
+    images: [svcAcrylic, galAcrylicTaupe],
   },
   {
     id: "gel-x-fill",
@@ -242,8 +250,9 @@ export const services: Service[] = [
     category: "Gel-X",
     price: 60,
     duration: 60,
-    description: "Refresh the growth area and color on an existing Gel-X set.",
-    includes: ["Growth-area fill", "Reshaping", "Color refresh", "Cuticle oil finish"],
+    description: "Refresh the growth area and colour on an existing Gel-X set.",
+    includes: ["Growth-area fill", "Reshaping", "Colour refresh", "Cuticle oil"],
+    images: [svcGelx, galGelxLine],
   },
   {
     id: "nail-art-simple",
@@ -253,6 +262,7 @@ export const services: Service[] = [
     duration: 15,
     description: "A few accent nails: lines, dots, tiny florals or a soft French.",
     includes: ["Up to 2 accent nails", "Hand-painted detail", "Sealed top coat"],
+    images: [galSage, galSeasonal],
   },
   {
     id: "nail-art-detailed",
@@ -267,6 +277,7 @@ export const services: Service[] = [
       "Chrome or foil accents",
       "Sealed top coat",
     ],
+    images: [galFloral, galSeasonal],
   },
   {
     id: "paraffin-add-on",
@@ -274,8 +285,9 @@ export const services: Service[] = [
     category: "Add-ons",
     price: 15,
     duration: 15,
-    description: "Warm paraffin wrap for soft, hydrated hands or feet.",
+    description: "A warm paraffin wrap for soft, hydrated hands or feet.",
     includes: ["Warm paraffin dip", "Hot towel wrap", "Hydrating balm"],
+    images: [svcDeluxePedi],
   },
   {
     id: "callus-add-on",
@@ -285,10 +297,22 @@ export const services: Service[] = [
     duration: 15,
     description: "Additional smoothing for heels that need a little more attention.",
     includes: ["Extended callus work", "Sea salt scrub", "Hydrating balm"],
+    images: [svcPedicure],
   },
 ];
 
+/** The three services featured on the homepage. */
+export const HOMEPAGE_SERVICE_IDS = [
+  "signature-pedicure",
+  "gel-manicure",
+  "acrylic-full-set",
+] as const;
+
 export const popularServices = services.filter((service) => service.popular);
+
+export const homepageServices = HOMEPAGE_SERVICE_IDS.map(
+  (id) => services.find((service) => service.id === id)!,
+);
 
 export function getService(id: string): Service | undefined {
   return services.find((service) => service.id === id);
@@ -303,4 +327,17 @@ export function formatDuration(minutes: number): string {
 
 export function formatPrice(amount: number): string {
   return `$${amount}`;
+}
+
+/** "50 min · From $55" — the single meta line used on every service card. */
+export function formatServiceMeta(service: Service): string {
+  return `${formatDuration(service.duration)} · From ${formatPrice(service.price)}`;
+}
+
+/** "Nail shaping, cuticle care, callus treatment…" — kept to 4–7 items. */
+export function formatIncludes(service: Service): string {
+  return service.includes
+    .slice(0, 7)
+    .map((item, index) => (index === 0 ? item : item.charAt(0).toLowerCase() + item.slice(1)))
+    .join(", ");
 }
