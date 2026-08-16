@@ -58,6 +58,19 @@
   --color-sidebar-border: var(--border);
   --color-sidebar-ring: var(--ring);
 
+  --color-status-neutral-bg: var(--status-neutral-bg);
+  --color-status-neutral-fg: var(--status-neutral-fg);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-status-info-fg: var(--status-info-fg);
+  --color-status-warn-bg: var(--status-warn-bg);
+  --color-status-warn-fg: var(--status-warn-fg);
+  --color-status-live-bg: var(--status-live-bg);
+  --color-status-live-fg: var(--status-live-fg);
+  --color-status-done-bg: var(--status-done-bg);
+  --color-status-done-fg: var(--status-done-fg);
+  --color-status-off-bg: var(--status-off-bg);
+  --color-status-off-fg: var(--status-off-fg);
+
   --shadow-soft: 0 1px 2px oklch(0.45 0.03 145 / 0.04), 0 8px 24px oklch(0.45 0.03 145 / 0.06);
   --shadow-lift: 0 2px 4px oklch(0.45 0.03 145 / 0.05), 0 18px 40px oklch(0.45 0.03 145 / 0.1);
 }
@@ -98,6 +111,20 @@
   --ivory: oklch(0.98 0.012 95);
   --cream: oklch(0.995 0.006 95);
   --beige: oklch(0.925 0.025 85);
+
+  /* Manager portal status colors — used sparingly for badges only. */
+  --status-neutral-bg: oklch(0.955 0.008 110);
+  --status-neutral-fg: oklch(0.45 0.015 150);
+  --status-info-bg: oklch(0.94 0.03 240);
+  --status-info-fg: oklch(0.45 0.09 250);
+  --status-warn-bg: oklch(0.95 0.055 85);
+  --status-warn-fg: oklch(0.48 0.09 70);
+  --status-live-bg: oklch(0.925 0.05 150);
+  --status-live-fg: oklch(0.4 0.075 152);
+  --status-done-bg: oklch(0.955 0.012 105);
+  --status-done-fg: oklch(0.56 0.015 150);
+  --status-off-bg: oklch(0.95 0.03 25);
+  --status-off-fg: oklch(0.5 0.13 27);
 }
 
 @layer base {
