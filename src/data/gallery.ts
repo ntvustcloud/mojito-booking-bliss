@@ -13,7 +13,6 @@ export type GalleryFilter =
   | "French"
   | "Nail Art"
   | "Seasonal"
-  | "Minimal"
   | "Pedicure";
 
 export type GalleryDesign = {
@@ -22,7 +21,6 @@ export type GalleryDesign = {
   category: GalleryFilter;
   description: string;
   image: string;
-  suggestsNailArt?: boolean;
 };
 
 export const GALLERY_FILTERS: GalleryFilter[] = [
@@ -31,7 +29,6 @@ export const GALLERY_FILTERS: GalleryFilter[] = [
   "French",
   "Nail Art",
   "Seasonal",
-  "Minimal",
   "Pedicure",
 ];
 
@@ -51,12 +48,11 @@ export const galleryDesigns: GalleryDesign[] = [
     description:
       "Our house shade with the faintest hand-drawn leaf detail. Calm colour, gentle line work.",
     image: galSage,
-    suggestsNailArt: true,
   },
   {
     id: "milky-clean",
     name: "Milky Clean Gel",
-    category: "Minimal",
+    category: "Gel",
     description:
       "Sheer milky white gel for a fresh, barely-there finish that flatters short natural nails.",
     image: galMilky,
@@ -76,7 +72,6 @@ export const galleryDesigns: GalleryDesign[] = [
     description:
       "Muted olive and warm caramel with a single pressed-leaf accent nail for the cooler months.",
     image: galSeasonal,
-    suggestsNailArt: true,
   },
   {
     id: "garden-floral",
@@ -85,7 +80,6 @@ export const galleryDesigns: GalleryDesign[] = [
     description:
       "Delicate hand-painted florals in sage and cream — our most requested detailed design.",
     image: galFloral,
-    suggestsNailArt: true,
   },
   {
     id: "fresh-neutral-toes",
@@ -102,7 +96,6 @@ export const galleryDesigns: GalleryDesign[] = [
     description:
       "Translucent nude Gel-X with one whisper-thin line for a subtle bit of structure.",
     image: galGelx,
-    suggestsNailArt: true,
   },
 ];
 
