@@ -7,9 +7,10 @@ import { useAppointment } from "@/state/appointment";
 import { cn } from "@/lib/utils";
 
 export function PopularMenu() {
-  const [activeId, setActiveId] = useState(popularServices[0].id);
+  const [activeId, setActiveId] = useState(popularServices[0]!.id);
   const { hasService, addService } = useAppointment();
-  const active = popularServices.find((service) => service.id === activeId) ?? popularServices[0];
+  const active = popularServices.find((service) => service.id === activeId) ?? popularServices[0]!;
+
 
   return (
     <section id="menu" className="section-shell scroll-mt-24 py-20">
