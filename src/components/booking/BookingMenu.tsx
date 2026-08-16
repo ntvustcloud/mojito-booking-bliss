@@ -26,7 +26,7 @@ export function BookingMenu() {
   }, [tab, query]);
 
   return (
-    <section className="rounded-3xl border border-border bg-card p-6 sm:p-8">
+    <section className="border-t border-border pt-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl">Full Salon Menu</h2>
