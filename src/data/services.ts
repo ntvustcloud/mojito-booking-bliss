@@ -1,5 +1,4 @@
 import svcPedicure from "@/assets/svc-pedicure.jpg";
-import svcGelMani from "@/assets/svc-gel-mani.jpg";
 import svcDeluxePedi from "@/assets/svc-deluxe-pedi.jpg";
 import svcDip from "@/assets/svc-dip.jpg";
 import svcAcrylic from "@/assets/svc-acrylic.jpg";
