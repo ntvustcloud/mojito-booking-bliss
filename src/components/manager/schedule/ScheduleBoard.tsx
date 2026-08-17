@@ -415,7 +415,7 @@ export function ScheduleBoard({
           <div
             className="grid"
             style={{
-              gridTemplateColumns: `4.5rem 13rem repeat(${technicians.length}, minmax(11rem, 1fr))`,
+              gridTemplateColumns: `4.5rem 24rem repeat(${technicians.length}, minmax(11rem, 1fr))`,
             }}
           >
             {/* Header row */}
