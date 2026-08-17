@@ -299,7 +299,7 @@ export function ScheduleBoard({
                     >
                       <BlockCard
                         block={block}
-                        compact={block.duration < 35}
+                        compact={block.duration < 55}
                         onOpen={() => onOpenAppointment(block.appointmentId)}
                         onDragStart={(event) => {
                           dragged.current = block;
