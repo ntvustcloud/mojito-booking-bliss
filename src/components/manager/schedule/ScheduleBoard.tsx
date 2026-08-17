@@ -559,31 +559,44 @@ export function ScheduleBoard({
                 )}
               </div>
 
-              {/* Upcoming unassigned — parked on their real scheduled time */}
-              {upcoming.map((block) => (
-                <div
-                  key={block.key}
-                  className="absolute inset-x-1 z-10"
-                  style={{
-                    top: Math.max(queueHeight + 4, minutesToOffset(block.start)),
-                    height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
-                  }}
-                >
-                  <div className="h-[calc(100%-1.1rem)]">
-                    <BlockCard
-                      block={block}
-                      compact={block.duration < 55}
-                      now={nowMinutes}
-                      onOpen={() => onOpenAppointment(block.appointmentId)}
-                      {...dragProps(block)}
-                    />
+              {/* Upcoming unassigned — parked on their real scheduled time, lanes on overlap */}
+              {upcoming.map((block) => {
+                const placement = upcomingLanes.get(block.key);
+                const laneCount = placement?.lanes ?? 1;
+                const stagger = (placement?.lane ?? 0) * QUEUE_STAGGER;
+                return (
+                  <div
+                    key={block.key}
+                    className="absolute inset-x-1 z-10"
+                    style={{
+                      top: Math.max(queueHeight + 4, minutesToOffset(block.start)) + stagger,
+                      height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
+                    }}
+                  >
+                    <div className="absolute inset-y-0" style={laneStyle(placement)}>
+                      <div className="h-[calc(100%-1.1rem)]">
+                        <BlockCard
+                          block={block}
+                          compact={block.duration < 55 || laneCount >= 3}
+                          dense={laneCount >= 3}
+                          hiddenCount={
+                            placement && placement.lane === laneCount - 1
+                              ? placement.hiddenCount
+                              : 0
+                          }
+                          now={nowMinutes}
+                          onOpen={() => onOpenAppointment(block.appointmentId)}
+                          {...dragProps(block)}
+                        />
+                      </div>
+                      <TurnSuggestion
+                        candidates={suggestions.get(block.key) ?? []}
+                        className="mt-0.5"
+                      />
+                    </div>
                   </div>
-                  <TurnSuggestion
-                    candidates={suggestions.get(block.key) ?? []}
-                    className="mt-0.5"
-                  />
-                </div>
-              ))}
+                );
+              })}
 
               {nowVisible && (
                 <div
