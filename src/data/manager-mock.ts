@@ -1,5 +1,6 @@
 import { getService, type Service } from "@/data/services";
 import { technicians } from "@/data/salon";
+import type { TechnicianCheckIn, TurnEvent } from "@/data/turn-system";
 
 /**
  * Manager Portal prototype data.
@@ -143,6 +144,7 @@ export const todayAppointments: Appointment[] = [
         name: "Sarah Nguyen",
         serviceIds: ["signature-pedicure"],
         technicianId: "mai",
+        requestedTechnicianId: "mai",
         status: "In Service",
         startedAt: "2:04 PM",
       },
@@ -201,6 +203,7 @@ export const todayAppointments: Appointment[] = [
         name: "Sarah",
         serviceIds: ["signature-pedicure", "gel-manicure"],
         technicianId: "mai",
+        requestedTechnicianId: "mai",
         status: "In Service",
         startedAt: "2:04 PM",
       },
@@ -253,6 +256,7 @@ export const todayAppointments: Appointment[] = [
         name: "Daniel Kim",
         serviceIds: ["classic-manicure"],
         technicianId: "rosa",
+        requestedTechnicianId: "rosa",
         status: "Completed",
       },
     ],
@@ -271,6 +275,7 @@ export const todayAppointments: Appointment[] = [
         name: "Hannah Brooks",
         serviceIds: ["dip-powder"],
         technicianId: "linh",
+        requestedTechnicianId: "linh",
         status: "Assigned",
       },
     ],
@@ -307,6 +312,7 @@ export const todayAppointments: Appointment[] = [
         name: "Megan Lo",
         serviceIds: ["gel-pedicure"],
         technicianId: "rosa",
+        requestedTechnicianId: "rosa",
         status: "Scheduled",
       },
     ],
@@ -445,3 +451,50 @@ export function technicianRows(
     };
   });
 }
+
+/**
+ * Mock daily check-in clock. The Turn System uses check-in order as the
+ * starting rotation for the day — swap for a real staff check-in feed later.
+ */
+export const technicianCheckIns: TechnicianCheckIn[] = [
+  { technicianId: "mai", atMinutes: 520 }, // 8:40 AM
+  { technicianId: "linh", atMinutes: 525 }, // 8:45 AM
+  { technicianId: "tran", atMinutes: 532 }, // 8:52 AM
+  { technicianId: "rosa", atMinutes: 540 }, // 9:00 AM
+];
+
+/** Turn ledger for the day so far (check-ins + accepted customers). */
+export const initialTurnEvents: TurnEvent[] = [
+  ...technicianCheckIns.map((checkIn) => ({
+    id: `chk-${checkIn.technicianId}`,
+    technicianId: checkIn.technicianId,
+    atMinutes: checkIn.atMinutes,
+    kind: "Check In" as const,
+    value: 0,
+    label: "Checked in",
+  })),
+  {
+    id: "turn-mai-1",
+    technicianId: "mai",
+    atMinutes: 545,
+    kind: "Requested",
+    value: 0.5,
+    label: "Sarah requested Mai",
+  },
+  {
+    id: "turn-linh-1",
+    technicianId: "linh",
+    atMinutes: 630,
+    kind: "Salon Assigned",
+    value: 1,
+    label: "Jessica (group) — salon assigned",
+  },
+  {
+    id: "turn-rosa-1",
+    technicianId: "rosa",
+    atMinutes: 720,
+    kind: "Requested",
+    value: 0.5,
+    label: "Daniel requested Rosa",
+  },
+];
