@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { NeedsAttention } from "@/components/manager/NeedsAttention";
 import { AppointmentDrawer } from "@/components/manager/AppointmentDrawer";
 import { WalkInDialog, type WalkInDraft } from "@/components/manager/WalkInDialog";
+import { ColorGuide } from "@/components/manager/schedule/ColorGuide";
+
 import {
   ScheduleBoard,
   type MoveRequest,
