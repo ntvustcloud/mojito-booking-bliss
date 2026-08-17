@@ -25,6 +25,18 @@ import {
   waitingMinutes,
   type ScheduleBlock,
 } from "@/data/schedule";
+import { TurnPriorityBadge } from "@/components/manager/schedule/TurnPriorityBadge";
+import { TurnSuggestion } from "@/components/manager/schedule/TurnSuggestion";
+import {
+  evaluateCandidates,
+  turnOrder,
+  turnPositions,
+  turnTotals,
+  type TechnicianCheckIn,
+  type TurnCandidate,
+  type TurnEvent,
+  type TurnQuality,
+} from "@/data/turn-system";
 import {
   technicianName,
   type Appointment,
@@ -115,7 +127,17 @@ function BlockCard({
           : `${formatShortMinutes(block.start)}–${formatShortMinutes(block.start + block.duration)}`}
         {block.isGroup && <Users className="size-3" aria-hidden />}
       </span>
-      <span className="truncate text-xs font-extrabold">{block.guestName}</span>
+      <span className="flex items-center gap-1">
+        <span className="min-w-0 flex-1 truncate text-xs font-extrabold">{block.guestName}</span>
+        {block.requestedTechnicianId === block.technicianId && (
+          <span
+            title={`Customer specifically requested ${technicianName(block.technicianId)} · \u00bd turn`}
+            className="shrink-0 rounded bg-background/60 px-1 text-[9px] font-extrabold tracking-wide uppercase"
+          >
+            Req
+          </span>
+        )}
+      </span>
       {!compact && (
         <span className="truncate text-[11px] leading-tight opacity-85">{block.serviceLabel}</span>
       )}
@@ -132,6 +154,8 @@ export function ScheduleBoard({
   appointments,
   technicians,
   blockouts,
+  turnEvents,
+  checkIns,
   nowMinutes,
   onOpenAppointment,
   onMove,
@@ -141,6 +165,8 @@ export function ScheduleBoard({
   appointments: Appointment[];
   technicians: TechnicianRow[];
   blockouts: TechnicianBlockout[];
+  turnEvents: TurnEvent[];
+  checkIns: TechnicianCheckIn[];
   nowMinutes: number | null;
   onOpenAppointment: (appointmentId: string) => void;
   onMove: (request: MoveRequest) => void;
@@ -159,6 +185,61 @@ export function ScheduleBoard({
   const dragged = useRef<ScheduleBlock | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [hover, setHover] = useState<{ technicianId: string; start: number } | null>(null);
+  const [dragging, setDragging] = useState<ScheduleBlock | null>(null);
+  const queueRef = useRef<HTMLDivElement | null>(null);
+  const [queueHeight, setQueueHeight] = useState(0);
+
+  // ---- Turn Recommendation System (decision support only) ----
+  const totals = useMemo(() => turnTotals(turnEvents), [turnEvents]);
+  const positions = useMemo(
+    () => turnPositions(turnOrder(technicians, checkIns, totals)),
+    [technicians, checkIns, totals],
+  );
+
+  const candidatesFor = useCallback(
+    (block: ScheduleBlock): TurnCandidate[] =>
+      evaluateCandidates({
+        technicians,
+        blocks,
+        blockouts,
+        checkIns,
+        events: turnEvents,
+        start: isWaitingNow(block)
+          ? snapToSlot(Math.max(nowMinutes ?? block.start, block.start))
+          : block.start,
+        duration: block.duration,
+        serviceLabel: block.serviceLabel,
+        ignoreKey: block.key,
+        requestedTechnicianId: block.requestedTechnicianId,
+        now: nowMinutes,
+      }),
+    [technicians, blocks, blockouts, checkIns, turnEvents, nowMinutes],
+  );
+
+  const suggestions = useMemo(() => {
+    const map = new Map<string, TurnCandidate[]>();
+    for (const block of [...waitingNow, ...upcoming]) map.set(block.key, candidatesFor(block));
+    return map;
+  }, [waitingNow, upcoming, candidatesFor]);
+
+  // Drag highlight: recommendation quality per technician column.
+  const dragQuality = useMemo(() => {
+    const map = new Map<string, TurnQuality>();
+    if (!dragging) return map;
+    for (const candidate of candidatesFor(dragging)) {
+      map.set(candidate.technicianId, candidate.quality);
+    }
+    return map;
+  }, [dragging, candidatesFor]);
+
+  const qualityTint = (technicianId: string) => {
+    const quality = dragQuality.get(technicianId);
+    if (!quality) return undefined;
+    if (quality === "best") return "bg-primary/10 ring-1 ring-inset ring-primary/40";
+    if (quality === "eligible") return "bg-status-info-bg/40";
+    if (quality === "limited") return "bg-status-warn-bg/40";
+    return "bg-muted/70 opacity-60";
+  };
 
   const totalHeight = slotCount() * SLOT_HEIGHT;
   const ticks = useMemo(() => {
@@ -177,6 +258,17 @@ export function ScheduleBoard({
     const target = minutesToOffset(nowMinutes) - 90;
     container.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
   }, [nowMinutes]);
+
+  // Keep upcoming unassigned cards from sliding under the live waiting queue.
+  useEffect(() => {
+    const node = queueRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const measure = () => setQueueHeight(node.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  });
 
   useEffect(() => {
     registerScrollToNow?.(nowVisible ? scrollToNow : null);
@@ -200,6 +292,7 @@ export function ScheduleBoard({
     event.preventDefault();
     const block = dragged.current;
     setHover(null);
+    setDragging(null);
     dragged.current = null;
     if (!block) return;
     const start = technicianId === "any" ? block.start : startFromEvent(event);
@@ -216,7 +309,7 @@ export function ScheduleBoard({
       const conflict = findConflict(blocks, technicianId, start, block.duration, block.key);
       if (conflict) {
         toast.error(
-          `This conflicts with ${conflict.guestName} at ${formatShortMinutes(conflict.start)}.`,
+          `${technicianName(technicianId)} has ${conflict.guestName} at ${formatShortMinutes(conflict.start)}. This service needs about ${block.duration} minutes.`,
         );
         return;
       }
@@ -229,8 +322,13 @@ export function ScheduleBoard({
     return {
       onDragStart: (event: React.DragEvent) => {
         dragged.current = block;
+        setDragging(block);
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData("text/plain", block.key);
+      },
+      onDragEnd: () => {
+        setDragging(null);
+        setHover(null);
       },
     };
   }
@@ -266,7 +364,10 @@ export function ScheduleBoard({
               return (
                 <div
                   key={technician.id}
-                  className="sticky top-0 z-20 border-r border-b border-border bg-muted/70 px-3 py-2 backdrop-blur last:border-r-0"
+                  className={cn(
+                    "sticky top-0 z-20 border-r border-b border-border bg-muted/70 px-3 py-2 backdrop-blur transition-colors last:border-r-0",
+                    qualityTint(technician.id),
+                  )}
                 >
                   <div className="flex items-center gap-2">
                     <span className="flex size-6 items-center justify-center rounded-md bg-secondary text-[10px] font-extrabold text-secondary-foreground">
@@ -275,6 +376,14 @@ export function ScheduleBoard({
                     <p className="truncate text-sm font-extrabold text-foreground">
                       {technician.name}
                     </p>
+                    <TurnPriorityBadge
+                      technicianId={technician.id}
+                      technicianName={technician.name}
+                      position={positions[technician.id] ?? technicians.length}
+                      total={totals[technician.id] ?? 0}
+                      events={turnEvents}
+                      checkIns={checkIns}
+                    />
                   </div>
                   <p className="mt-0.5 flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
                     <span
@@ -335,18 +444,24 @@ export function ScheduleBoard({
               style={{ height: totalHeight }}
             >
               {/* Waiting now — a live queue stacked at the top of the column */}
-              <div className="relative z-20 space-y-2 p-2">
+              <div
+                ref={queueRef}
+                className="relative z-30 space-y-2 border-b border-border bg-card p-2 shadow-sm"
+              >
                 <p className="text-[10px] font-extrabold tracking-[0.1em] uppercase text-status-warn-fg">
                   Waiting now
                 </p>
                 {waitingNow.map((block) => (
-                  <div key={block.key} className="h-[4.5rem]">
-                    <BlockCard
-                      block={block}
-                      waitedFor={waitingMinutes(block, nowMinutes)}
-                      onOpen={() => onOpenAppointment(block.appointmentId)}
-                      {...dragProps(block)}
-                    />
+                  <div key={block.key} className="space-y-1">
+                    <div className="h-[4.5rem]">
+                      <BlockCard
+                        block={block}
+                        waitedFor={waitingMinutes(block, nowMinutes)}
+                        onOpen={() => onOpenAppointment(block.appointmentId)}
+                        {...dragProps(block)}
+                      />
+                    </div>
+                    <TurnSuggestion candidates={suggestions.get(block.key) ?? []} />
                   </div>
                 ))}
                 {waitingNow.length === 0 && (
@@ -365,15 +480,21 @@ export function ScheduleBoard({
                   key={block.key}
                   className="absolute inset-x-1 z-10"
                   style={{
-                    top: minutesToOffset(block.start),
+                    top: Math.max(queueHeight + 4, minutesToOffset(block.start)),
                     height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
                   }}
                 >
-                  <BlockCard
-                    block={block}
-                    compact={block.duration < 55}
-                    onOpen={() => onOpenAppointment(block.appointmentId)}
-                    {...dragProps(block)}
+                  <div className="h-[calc(100%-1.1rem)]">
+                    <BlockCard
+                      block={block}
+                      compact={block.duration < 55}
+                      onOpen={() => onOpenAppointment(block.appointmentId)}
+                      {...dragProps(block)}
+                    />
+                  </div>
+                  <TurnSuggestion
+                    candidates={suggestions.get(block.key) ?? []}
+                    className="mt-0.5"
                   />
                 </div>
               ))}
@@ -395,7 +516,10 @@ export function ScheduleBoard({
               return (
                 <div
                   key={technician.id}
-                  className="relative border-r border-border last:border-r-0"
+                  className={cn(
+                    "relative border-r border-border transition-colors last:border-r-0",
+                    qualityTint(technician.id),
+                  )}
                   style={{ height: totalHeight }}
                   onDragOver={(event) => {
                     event.preventDefault();
@@ -483,7 +607,8 @@ export function ScheduleBoard({
       <p className="flex items-center gap-1.5 border-t border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
         <Clock className="size-3.5" aria-hidden />
         Drag a card to another technician or time to reassign — snaps to {SLOT_MINUTES} minutes.
-        Breaks and off-shift blocks can&apos;t take appointments.
+        Breaks and off-shift blocks can&apos;t take appointments. Turn numbers and ★ suggestions
+        are recommendations — you always decide.
       </p>
     </section>
   );

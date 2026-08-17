@@ -20,13 +20,16 @@ import {
 } from "@/components/manager/schedule/ScheduleBoard";
 import { formatMinutes, snapToSlot } from "@/data/schedule";
 import {
+  initialTurnEvents,
   technicianBlockouts,
+  technicianCheckIns,
   technicianName,
   technicianRows,
   technicianShifts,
   todayAppointments,
   type Appointment,
 } from "@/data/manager-mock";
+import { turnValueFor, type TurnEvent } from "@/data/turn-system";
 
 export const Route = createFileRoute("/manager/today")({
   head: () => ({
@@ -48,6 +51,7 @@ export const Route = createFileRoute("/manager/today")({
 function TodayBoard() {
   // Mock local state — replace with shared salon data later.
   const [appointments, setAppointments] = useState<Appointment[]>(todayAppointments);
+  const [turnEvents, setTurnEvents] = useState<TurnEvent[]>(initialTurnEvents);
   const [openId, setOpenId] = useState<string | null>(null);
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [appointmentOpen, setAppointmentOpen] = useState(false);
@@ -110,6 +114,36 @@ function TodayBoard() {
     );
   }
 
+  /** Turn ledger only changes when a customer is actually accepted by a tech. */
+  function recordTurn(
+    technicianId: string,
+    guestName: string,
+    requestedTechnicianId: string | undefined,
+    source: Appointment["source"],
+    atMinutes: number,
+  ): string | null {
+    if (technicianId === "any") return null;
+    const { value, kind } = turnValueFor(technicianId, requestedTechnicianId, source);
+    const id = `turn-${technicianId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setTurnEvents((current) => [
+      ...current,
+      {
+        id,
+        technicianId,
+        atMinutes,
+        kind,
+        value,
+        label:
+          kind === "Requested"
+            ? `${guestName} requested ${technicianName(technicianId)}`
+            : kind === "Walk-In"
+              ? `${guestName} — walk-in`
+              : `${guestName} — salon assigned`,
+      },
+    ]);
+    return id;
+  }
+
   function handleMove(request: MoveRequest) {
     const { block, technicianId, start } = request;
     const previous = {
@@ -125,16 +159,32 @@ function TodayBoard() {
         : {}),
       ...(technicianId === "any" ? { status: "Waiting" as const } : {}),
     });
+    const turnId = recordTurn(
+      technicianId,
+      block.guestName,
+      block.requestedTechnicianId,
+      block.source,
+      start,
+    );
     toast.success(
       technicianId === "any"
         ? `${block.guestName} moved back to waiting`
         : `${block.guestName} assigned to ${technicianName(technicianId)} at ${formatMinutes(start)}`,
       {
         duration: 6000,
+        ...(technicianId !== "any"
+          ? {
+              description:
+                block.requestedTechnicianId === technicianId
+                  ? `Requested technician · +0.5 turn`
+                  : `Salon assigned · +1.0 turn`,
+            }
+          : {}),
         action: {
           label: "Undo",
           onClick: () => {
             updateGuest(block.appointmentId, block.guestId, previous);
+            if (turnId) setTurnEvents((current) => current.filter((event) => event.id !== turnId));
             toast.info(`${block.guestName} move undone`);
           },
         },
@@ -174,7 +224,14 @@ function TodayBoard() {
         ],
       },
     ]);
-    toast.success(`${name} added to waiting`);
+    if (draft.technicianId !== "any") {
+      recordTurn(draft.technicianId, name, undefined, "Walk-In", minutes);
+    }
+    toast.success(
+      draft.technicianId === "any"
+        ? `${name} added to waiting`
+        : `${name} assigned to ${technicianName(draft.technicianId)} · +1.0 turn`,
+    );
   }
 
   return (
@@ -262,6 +319,8 @@ function TodayBoard() {
           appointments={appointments}
           technicians={rows}
           blockouts={technicianBlockouts}
+          turnEvents={turnEvents}
+          checkIns={technicianCheckIns}
           registerScrollToNow={registerScrollToNow}
           nowMinutes={dayOffset === 0 ? nowMinutes : null}
           onOpenAppointment={(id) => setOpenId(id)}
