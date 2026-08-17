@@ -196,8 +196,15 @@ export function ScheduleBoard({
 }) {
   const blocks = useMemo(() => buildBlocks(appointments), [appointments]);
   const waitingNow = useMemo(
-    () => blocks.filter(isWaitingNow).sort((a, b) => (a.waitingSince ?? a.start) - (b.waitingSince ?? b.start)),
-    [blocks],
+    () =>
+      blocks
+        .filter(isWaitingNow)
+        .sort(
+          (a, b) =>
+            queuePriority(a, nowMinutes) - queuePriority(b, nowMinutes) ||
+            (a.waitingSince ?? a.start) - (b.waitingSince ?? b.start),
+        ),
+    [blocks, nowMinutes],
   );
   const upcoming = useMemo(
     () => blocks.filter(isUpcomingUnassigned).sort((a, b) => a.start - b.start),
@@ -256,10 +263,12 @@ export function ScheduleBoard({
   const qualityTint = (technicianId: string) => {
     const quality = dragQuality.get(technicianId);
     if (!quality) return undefined;
-    if (quality === "best") return "bg-primary/10 ring-1 ring-inset ring-primary/40";
-    if (quality === "eligible") return "bg-status-info-bg/40";
-    if (quality === "limited") return "bg-status-warn-bg/40";
-    return "bg-muted/70 opacity-60";
+    if (quality === "best") return "bg-primary/10 ring-2 ring-inset ring-primary/50";
+    if (quality === "eligible")
+      return "bg-status-live-bg/45 ring-1 ring-inset ring-status-live-fg/35";
+    if (quality === "limited")
+      return "bg-status-warn-bg/45 ring-1 ring-inset ring-status-warn-fg/40";
+    return "bg-muted/70 opacity-60 ring-1 ring-inset ring-border";
   };
 
   const totalHeight = slotCount() * SLOT_HEIGHT;
