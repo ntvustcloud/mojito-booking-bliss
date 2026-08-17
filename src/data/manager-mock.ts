@@ -40,6 +40,8 @@ export type BookingGuest = {
   technicianId: string;
   status: AppointmentStatus;
   startedAt?: string;
+  /** Optional per-guest start (minutes from midnight) when rescheduled on the board. */
+  startMinutes?: number;
 };
 
 export type Appointment = {
