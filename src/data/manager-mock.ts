@@ -38,7 +38,13 @@ export type BookingGuest = {
   serviceIds: string[];
   /** Technician id from `technicians`, or "any" when unassigned. */
   technicianId: string;
+  /**
+   * Set only when the customer specifically requested this technician when
+   * booking. A requested appointment is worth half a turn.
+   */
+  requestedTechnicianId?: string;
   status: AppointmentStatus;
+
   startedAt?: string;
   /** Optional per-guest start (minutes from midnight) when rescheduled on the board. */
   startMinutes?: number;
