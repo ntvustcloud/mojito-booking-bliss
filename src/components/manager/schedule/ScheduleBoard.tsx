@@ -95,15 +95,22 @@ function BlockCard({
   block,
   compact,
   waitedFor,
+  now,
   onOpen,
   onDragStart,
 }: {
   block: ScheduleBlock;
   compact?: boolean;
   waitedFor?: number | null;
+  now: number | null;
   onOpen: () => void;
   onDragStart: (event: React.DragEvent) => void;
 }) {
+  const visual = stateVisual(block, now);
+  const StateIcon = visual.icon;
+  const isWalkIn = block.source === "Walk-In";
+  const inQueue = waitedFor !== undefined;
+
   return (
     <button
       type="button"
@@ -118,13 +125,21 @@ function BlockCard({
             groupAccent(block.appointmentId),
           ),
         block.isGroup && "pl-2.5",
-        CARD_TONE[block.status],
+        visual.card,
       )}
     >
-      <span className="flex items-center gap-1 text-[10px] font-extrabold tracking-wide opacity-80">
-        {waitedFor !== undefined && waitedFor !== null
-          ? `Waiting ${waitedFor} min`
-          : `${formatShortMinutes(block.start)}–${formatShortMinutes(block.start + block.duration)}`}
+      <span className="flex items-center gap-1 text-[10px] font-extrabold tracking-wide opacity-85">
+        {isWalkIn ? (
+          <>
+            <Footprints className="size-3 shrink-0" aria-hidden />
+            Walk-In
+          </>
+        ) : (
+          <>
+            <CalendarDays className="size-3 shrink-0" aria-hidden />
+            {inQueue ? `Appt ${formatShortMinutes(block.start)}` : `${formatShortMinutes(block.start)}–${formatShortMinutes(block.start + block.duration)}`}
+          </>
+        )}
         {block.isGroup && <Users className="size-3" aria-hidden />}
       </span>
       <span className="flex items-center gap-1">
@@ -141,14 +156,20 @@ function BlockCard({
       {!compact && (
         <span className="truncate text-[11px] leading-tight opacity-85">{block.serviceLabel}</span>
       )}
-      <span className="mt-auto flex items-center gap-1 text-[10px] font-bold">
-        <span className={cn("size-1.5 rounded-full", DOT_TONE[block.status])} aria-hidden />
-        {block.status}
-        {block.technicianId === "any" && <span className="opacity-70">· Any tech</span>}
+      <span className="mt-auto flex flex-wrap items-center gap-x-1 text-[10px] font-bold">
+        <StateIcon className="size-3 shrink-0" aria-hidden />
+        <span className="truncate">{visual.label}</span>
+        {waitedFor !== undefined && waitedFor !== null && (
+          <span className="opacity-80">· Waiting {waitedFor} min</span>
+        )}
+        {block.technicianId === "any" && !isWalkIn && (
+          <span className="opacity-70">· Any tech</span>
+        )}
       </span>
     </button>
   );
 }
+
 
 export function ScheduleBoard({
   appointments,
