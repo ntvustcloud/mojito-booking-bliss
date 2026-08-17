@@ -294,7 +294,7 @@ export function ScheduleBoard({
                       className="absolute inset-x-1 z-10"
                       style={{
                         top: minutesToOffset(block.start),
-                        height: Math.max(SLOT_HEIGHT, block.duration * PIXELS_PER_MINUTE) - 3,
+                        height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
                       }}
                     >
                       <BlockCard
