@@ -74,7 +74,7 @@ function availabilityLine(
   }
   const next = nextBlockStart(blocks, technician.id, from);
   const nextBreak = blockouts.find((blockout) => blockout.start >= from);
-  if (next !== null) return `Next appointment ${formatShortMinutes(next)}`;
+  if (next !== null) return `Next ${formatShortMinutes(next)}`;
   if (nextBreak) return `Open until ${formatShortMinutes(nextBreak.start)}`;
   return "Open rest of day";
 }
@@ -335,7 +335,7 @@ export function ScheduleBoard({
               style={{ height: totalHeight }}
             >
               {/* Waiting now — a live queue stacked at the top of the column */}
-              <div className="space-y-2 p-2">
+              <div className="relative z-20 space-y-2 p-2">
                 <p className="text-[10px] font-extrabold tracking-[0.1em] uppercase text-status-warn-fg">
                   Waiting now
                 </p>
