@@ -431,7 +431,10 @@ export function ScheduleBoard({
               style={{ height: totalHeight }}
             >
               {/* Waiting now — a live queue stacked at the top of the column */}
-              <div className="relative z-30 space-y-2 border-b border-border bg-card p-2 shadow-sm">
+              <div
+                ref={queueRef}
+                className="relative z-30 space-y-2 border-b border-border bg-card p-2 shadow-sm"
+              >
                 <p className="text-[10px] font-extrabold tracking-[0.1em] uppercase text-status-warn-fg">
                   Waiting now
                 </p>
@@ -464,7 +467,7 @@ export function ScheduleBoard({
                   key={block.key}
                   className="absolute inset-x-1 z-10"
                   style={{
-                    top: minutesToOffset(block.start),
+                    top: Math.max(queueHeight + 4, minutesToOffset(block.start)),
                     height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
                   }}
                 >
