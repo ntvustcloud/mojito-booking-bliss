@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus, UserPlus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -11,23 +11,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { GroupBadge, StatusBadge } from "@/components/manager/StatusBadge";
 import { NeedsAttention } from "@/components/manager/NeedsAttention";
-import { TechnicianBoard } from "@/components/manager/TechnicianBoard";
 import { AppointmentDrawer } from "@/components/manager/AppointmentDrawer";
 import { WalkInDialog, type WalkInDraft } from "@/components/manager/WalkInDialog";
 import {
-  appointmentServiceLabel,
-  appointmentStatus,
-  appointmentTechnicianLabel,
-  isGroup,
+  ScheduleBoard,
+  type MoveRequest,
+} from "@/components/manager/schedule/ScheduleBoard";
+import { formatMinutes, snapToSlot } from "@/data/schedule";
+import {
+  technicianName,
   technicianRows,
   technicianShifts,
   todayAppointments,
   type Appointment,
-  type AppointmentStatus,
 } from "@/data/manager-mock";
-import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/manager/today")({
   head: () => ({
@@ -36,23 +34,15 @@ export const Route = createFileRoute("/manager/today")({
       {
         name: "description",
         content:
-          "Live salon board: who is coming today, who is waiting, who is in service and which technicians are free.",
+          "Live technician schedule board: who is working, who is available, who is waiting and where the day has open capacity.",
       },
       { name: "robots", content: "noindex" },
       { property: "og:title", content: "Today — Mojito Manager Portal" },
-      { property: "og:description", content: "Live operational board for Mojito Nail Salon." },
+      { property: "og:description", content: "Live technician schedule board for Mojito Nail Salon." },
     ],
   }),
   component: TodayBoard,
 });
-
-const ACTIVE_STATUSES: AppointmentStatus[] = [
-  "Scheduled",
-  "Checked In",
-  "Waiting",
-  "Assigned",
-  "In Service",
-];
 
 function TodayBoard() {
   // Mock local state — replace with shared salon data later.
@@ -60,11 +50,32 @@ function TodayBoard() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [appointmentOpen, setAppointmentOpen] = useState(false);
+  const [newSlot, setNewSlot] = useState<{ technicianId: string; start: number } | null>(null);
+  const [pendingMove, setPendingMove] = useState<MoveRequest | null>(null);
+  const [dayOffset, setDayOffset] = useState(0);
+  const [nowMinutes, setNowMinutes] = useState<number | null>(null);
+  const [dateLabel, setDateLabel] = useState("");
 
-  const sorted = useMemo(
-    () => [...appointments].sort((a, b) => a.minutes - b.minutes),
-    [appointments],
-  );
+  // Client-only clock (keeps SSR markup stable) that advances the time line.
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setNowMinutes(now.getHours() * 60 + now.getMinutes());
+    };
+    tick();
+    const id = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const date = new Date();
+    date.setDate(date.getDate() + dayOffset);
+    setDateLabel(
+      date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
+    );
+  }, [dayOffset]);
+
+  const rows = useMemo(() => technicianRows(appointments, technicianShifts), [appointments]);
 
   const stats = useMemo(() => {
     const guests = appointments.flatMap((appointment) => appointment.guests);
@@ -72,17 +83,9 @@ function TodayBoard() {
       total: appointments.length,
       waiting: guests.filter((guest) => ["Waiting", "Checked In"].includes(guest.status)).length,
       inService: guests.filter((guest) => guest.status === "In Service").length,
-      availableTechs: technicianRows(appointments, technicianShifts).filter(
-        (row) => row.state === "Available",
-      ).length,
+      availableTechs: rows.filter((row) => row.state === "Available").length,
     };
-  }, [appointments]);
-
-  const today = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  }, [appointments, rows]);
 
   const active = appointments.find((appointment) => appointment.id === openId) ?? null;
 
@@ -105,17 +108,42 @@ function TodayBoard() {
     );
   }
 
+  function applyMove(request: MoveRequest) {
+    const { block, technicianId, start } = request;
+    updateGuest(block.appointmentId, block.guestId, {
+      technicianId,
+      startMinutes: start,
+      ...(technicianId !== "any" && block.status === "Waiting"
+        ? { status: "Assigned" as const }
+        : {}),
+      ...(technicianId === "any" ? { status: "Waiting" as const } : {}),
+    });
+    toast.success(
+      technicianId === "any"
+        ? `${block.guestName} moved back to waiting`
+        : `${block.guestName} → ${technicianName(technicianId)} at ${formatMinutes(start)}`,
+    );
+  }
+
+  function handleMove(request: MoveRequest) {
+    if (request.conflictWith) {
+      setPendingMove(request);
+      return;
+    }
+    applyMove(request);
+  }
+
   function handleWalkIn(draft: WalkInDraft) {
     const now = new Date();
     const id = `walkin-${now.getTime()}`;
-    const label = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    const minutes = snapToSlot(now.getHours() * 60 + now.getMinutes());
     const name = draft.name.trim() || "Walk-In Guest";
     setAppointments((current) => [
       ...current,
       {
         id,
-        time: label,
-        minutes: now.getHours() * 60 + now.getMinutes(),
+        time: formatMinutes(minutes),
+        minutes,
         title: name,
         primaryContact: name,
         phone: draft.phone.trim() || "—",
@@ -127,6 +155,7 @@ function TodayBoard() {
             serviceIds: draft.serviceIds,
             technicianId: draft.technicianId,
             status: draft.technicianId === "any" ? "Waiting" : "Assigned",
+            startMinutes: minutes,
           },
         ],
       },
@@ -135,13 +164,44 @@ function TodayBoard() {
   }
 
   return (
-    <div className="min-w-0 flex-1 p-3 lg:p-5">
-      {/* Header + operational stats */}
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight lg:text-[1.75rem]">Today</h1>
-          <p className="text-sm text-muted-foreground">{today}</p>
-          <p className="mt-1 text-sm font-bold text-foreground">
+    <div className="min-w-0 flex-1 p-3 lg:p-4">
+      {/* Compact operational top bar */}
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-extrabold tracking-tight lg:text-2xl">Today</h1>
+            <div className="flex items-center rounded-lg border border-border bg-card">
+              <button
+                type="button"
+                aria-label="Previous day"
+                onClick={() => setDayOffset((value) => value - 1)}
+                className="rounded-l-lg px-1.5 py-1 text-muted-foreground transition-colors hover:bg-secondary"
+              >
+                <ChevronLeft className="size-4" aria-hidden />
+              </button>
+              <span className="min-w-[9.5rem] px-2 text-center text-xs font-bold text-foreground">
+                {dateLabel || "\u00a0"}
+              </span>
+              <button
+                type="button"
+                aria-label="Next day"
+                onClick={() => setDayOffset((value) => value + 1)}
+                className="rounded-r-lg px-1.5 py-1 text-muted-foreground transition-colors hover:bg-secondary"
+              >
+                <ChevronRight className="size-4" aria-hidden />
+              </button>
+            </div>
+            {dayOffset !== 0 && (
+              <Button
+                variant="ghost"
+                className="h-8 rounded-lg text-xs"
+                onClick={() => setDayOffset(0)}
+              >
+                Go to today
+              </Button>
+            )}
+          </div>
+          <p className="mt-1 text-xs font-bold text-foreground sm:text-sm">
             {stats.total} Appointments
             <span className="mx-1.5 text-muted-foreground/60">·</span>
             {stats.waiting} Waiting
@@ -152,83 +212,39 @@ function TodayBoard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            className="h-9 rounded-lg"
-            onClick={() => setWalkInOpen(true)}
-          >
+          <Button variant="outline" className="h-9 rounded-lg" onClick={() => setWalkInOpen(true)}>
             <UserPlus className="size-4" aria-hidden />
             Walk-In
           </Button>
-          <Button className="h-9 rounded-lg" onClick={() => setAppointmentOpen(true)}>
+          <Button
+            className="h-9 rounded-lg"
+            onClick={() => {
+              setNewSlot(null);
+              setAppointmentOpen(true);
+            }}
+          >
             <Plus className="size-4" aria-hidden />
             Appointment
           </Button>
         </div>
       </header>
 
-      <div className="mt-4">
-        <NeedsAttention appointments={sorted} onOpen={(id) => setOpenId(id)} />
+      <div className="mt-3">
+        <NeedsAttention appointments={appointments} onOpen={(id) => setOpenId(id)} />
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
-        {/* Today's appointments */}
-        <section className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
-            <h2 className="text-xs font-extrabold tracking-[0.12em] uppercase text-muted-foreground">
-              Today's appointments
-            </h2>
-            <span className="text-xs font-bold text-muted-foreground">
-              {sorted.filter((a) => ACTIVE_STATUSES.includes(appointmentStatus(a))).length} active
-            </span>
-          </div>
-
-          <div className="hidden grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,1.2fr)_7rem_7rem] gap-3 border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-extrabold tracking-wide uppercase text-muted-foreground sm:grid">
-            <span>Time</span>
-            <span>Customer</span>
-            <span>Services</span>
-            <span>Technician</span>
-            <span>Status</span>
-          </div>
-
-          <ul className="divide-y divide-border">
-            {sorted.map((appointment) => {
-              const group = isGroup(appointment);
-              return (
-                <li key={appointment.id}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenId(appointment.id)}
-                    className={cn(
-                      "grid w-full grid-cols-1 gap-1 px-3 py-2.5 text-left transition-colors hover:bg-secondary/50",
-                      "sm:grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,1.2fr)_7rem_7rem] sm:items-center sm:gap-3",
-                    )}
-                  >
-                    <span className="text-sm font-bold text-foreground">{appointment.time}</span>
-                    <span className="min-w-0 truncate text-sm font-semibold text-foreground">
-                      {appointment.title}
-                    </span>
-                    <span className="min-w-0 truncate text-sm text-muted-foreground">
-                      {appointmentServiceLabel(appointment)}
-                    </span>
-                    <span className="min-w-0 truncate text-sm text-muted-foreground">
-                      {appointmentTechnicianLabel(appointment)}
-                    </span>
-                    <span className="flex">
-                      {group ? (
-                        <GroupBadge count={appointment.guests.length} />
-                      ) : (
-                        <StatusBadge status={appointmentStatus(appointment)} />
-                      )}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-
-        <TechnicianBoard appointments={sorted} shifts={technicianShifts} />
+      <div className="mt-3">
+        <ScheduleBoard
+          appointments={appointments}
+          technicians={rows}
+          nowMinutes={dayOffset === 0 ? nowMinutes : null}
+          onOpenAppointment={(id) => setOpenId(id)}
+          onMove={handleMove}
+          onCreateAt={(technicianId, start) => {
+            setNewSlot({ technicianId, start });
+            setAppointmentOpen(true);
+          }}
+        />
       </div>
 
       <AppointmentDrawer
@@ -255,13 +271,45 @@ function TodayBoard() {
 
       <WalkInDialog open={walkInOpen} onOpenChange={setWalkInOpen} onSubmit={handleWalkIn} />
 
+      {/* Conflict feedback on drop */}
+      <Dialog open={Boolean(pendingMove)} onOpenChange={(open) => !open && setPendingMove(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Time conflict</DialogTitle>
+            <DialogDescription>
+              {pendingMove &&
+                `This time conflicts with ${technicianName(pendingMove.technicianId)}'s ${pendingMove.conflictWith?.guestName} appointment at ${formatMinutes(pendingMove.conflictWith?.start ?? 0)}. Choose another time, or move it anyway.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="rounded-lg"
+              onClick={() => setPendingMove(null)}
+            >
+              Cancel move
+            </Button>
+            <Button
+              className="rounded-lg"
+              onClick={() => {
+                if (pendingMove) applyMove(pendingMove);
+                setPendingMove(null);
+              }}
+            >
+              Move anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={appointmentOpen} onOpenChange={setAppointmentOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>New appointment</DialogTitle>
             <DialogDescription>
-              Full appointment booking (customer, date, time, guests) comes next. Walk-ins can be
-              added right now.
+              {newSlot
+                ? `Pre-filled for ${technicianName(newSlot.technicianId)} at ${formatMinutes(newSlot.start)}. Full booking (customer, services, guests) comes next — walk-ins can be added right now.`
+                : "Full appointment booking (customer, date, time, guests) comes next. Walk-ins can be added right now."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
