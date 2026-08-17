@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Clock, Users } from "lucide-react";
+import { CalendarDays, Clock, Footprints, Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { queuePriority, stateVisual } from "@/components/manager/schedule/scheduleTone";
@@ -478,6 +478,7 @@ export function ScheduleBoard({
                       <BlockCard
                         block={block}
                         waitedFor={waitingMinutes(block, nowMinutes)}
+                        now={nowMinutes}
                         onOpen={() => onOpenAppointment(block.appointmentId)}
                         {...dragProps(block)}
                       />
@@ -509,6 +510,7 @@ export function ScheduleBoard({
                     <BlockCard
                       block={block}
                       compact={block.duration < 55}
+                      now={nowMinutes}
                       onOpen={() => onOpenAppointment(block.appointmentId)}
                       {...dragProps(block)}
                     />
@@ -607,6 +609,7 @@ export function ScheduleBoard({
                       <BlockCard
                         block={block}
                         compact={block.duration < 55}
+                      now={nowMinutes}
                         onOpen={() => onOpenAppointment(block.appointmentId)}
                         {...dragProps(block)}
                       />
