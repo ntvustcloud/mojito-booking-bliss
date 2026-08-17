@@ -42,6 +42,8 @@ export type BookingGuest = {
   startedAt?: string;
   /** Optional per-guest start (minutes from midnight) when rescheduled on the board. */
   startMinutes?: number;
+  /** When the guest physically started waiting (minutes from midnight). */
+  waitingSinceMinutes?: number;
 };
 
 export type Appointment = {
