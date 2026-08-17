@@ -4,12 +4,12 @@ import {
   findBlockout,
   findConflict,
   formatShortMinutes,
-  isActiveBlock,
   nextBlockStart,
   nextFreeMinute,
   type ScheduleBlock,
 } from "@/data/schedule";
 import type { TechnicianBlockout, TechnicianRow } from "@/data/manager-mock";
+
 
 /**
  * Nail-salon Turn Recommendation System.
