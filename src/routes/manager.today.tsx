@@ -292,7 +292,9 @@ function TodayBoard() {
             {stats.availableTechs} Available Techs
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <ColorGuide />
+
           <Button variant="outline" className="h-9 rounded-lg" onClick={() => setWalkInOpen(true)}>
             <UserPlus className="size-4" aria-hidden />
             Walk-In
