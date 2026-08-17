@@ -243,6 +243,18 @@ export function ScheduleBoard({
     () => blocks.filter(isUpcomingUnassigned).sort((a, b) => a.start - b.start),
     [blocks],
   );
+  // Side-by-side lanes for unassigned cards that share a time range.
+  const upcomingLanes = useMemo(
+    () =>
+      layoutLanes(
+        upcoming.map((block) => ({
+          key: block.key,
+          start: block.start,
+          duration: block.duration,
+        })),
+      ),
+    [upcoming],
+  );
   const dragged = useRef<ScheduleBlock | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [hover, setHover] = useState<{ technicianId: string; start: number } | null>(null);
