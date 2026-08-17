@@ -69,6 +69,8 @@ export type ScheduleBlock = {
   groupLabel?: string;
   serviceLabel: string;
   technicianId: string;
+  /** Set when the customer specifically requested this technician (½ turn). */
+  requestedTechnicianId?: string;
   status: AppointmentStatus;
   waitingSince?: number;
   start: number;
@@ -90,6 +92,9 @@ export function buildBlocks(appointments: Appointment[]): ScheduleBlock[] {
         ...(group ? { groupLabel: appointment.title } : {}),
         serviceLabel: guestServiceLabel(guest),
         technicianId: guest.technicianId,
+        ...(guest.requestedTechnicianId
+          ? { requestedTechnicianId: guest.requestedTechnicianId }
+          : {}),
         status: guest.status,
         ...(guest.waitingSinceMinutes !== undefined
           ? { waitingSince: guest.waitingSinceMinutes }
