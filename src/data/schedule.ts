@@ -198,3 +198,83 @@ export function nextBlockStart(
   );
   return next ? next.start : null;
 }
+
+/* ---------------- Calendar-style overlap lanes ---------------- */
+
+/** Max side-by-side lanes before extra overlaps collapse into a "+N more" hint. */
+export const MAX_LANES = 4;
+
+export type LanePlacement = {
+  /** 0-based horizontal lane index. */
+  lane: number;
+  /** How many lanes the card's overlap cluster is divided into. */
+  lanes: number;
+  /** Overlapping cards in the same cluster that did not fit into a lane. */
+  hiddenCount: number;
+};
+
+type Placeable = { key: string; start: number; duration: number };
+
+/**
+ * Assigns each item a lane so overlapping items sit side by side instead of on
+ * top of each other — the same greedy sweep professional calendars use.
+ */
+export function layoutLanes<T extends Placeable>(items: T[]): Map<string, LanePlacement> {
+  const placements = new Map<string, LanePlacement>();
+  const sorted = [...items].sort((a, b) => a.start - b.start || a.duration - b.duration);
+
+  let cluster: T[] = [];
+  let clusterEnd = -Infinity;
+
+  const flush = () => {
+    if (cluster.length === 0) return;
+    const laneEnds: number[] = [];
+    const assigned: { item: T; lane: number | null }[] = [];
+    for (const item of cluster) {
+      let lane = laneEnds.findIndex((end) => end <= item.start);
+      if (lane === -1) {
+        if (laneEnds.length < MAX_LANES) {
+          lane = laneEnds.length;
+          laneEnds.push(item.start + item.duration);
+        } else {
+          assigned.push({ item, lane: null });
+          continue;
+        }
+      } else {
+        laneEnds[lane] = item.start + item.duration;
+      }
+      assigned.push({ item, lane });
+    }
+    const lanes = Math.max(1, laneEnds.length);
+    const hiddenCount = assigned.filter((entry) => entry.lane === null).length;
+    for (const entry of assigned) {
+      if (entry.lane === null) continue;
+      placements.set(entry.item.key, { lane: entry.lane, lanes, hiddenCount });
+    }
+    cluster = [];
+    clusterEnd = -Infinity;
+  };
+
+  for (const item of sorted) {
+    if (cluster.length > 0 && item.start >= clusterEnd) flush();
+    cluster.push(item);
+    clusterEnd = Math.max(clusterEnd, item.start + item.duration);
+  }
+  flush();
+
+  return placements;
+}
+
+/** Inline geometry for a lane placement, with small gutters between lanes. */
+export function laneStyle(
+  placement: LanePlacement | undefined,
+  gutterPx = 3,
+): { left: string; width: string } {
+  const lanes = placement?.lanes ?? 1;
+  const lane = placement?.lane ?? 0;
+  if (lanes <= 1) return { left: "0px", width: "100%" };
+  return {
+    left: `calc(${(lane / lanes) * 100}% + ${lane === 0 ? 0 : gutterPx / 2}px)`,
+    width: `calc(${100 / lanes}% - ${gutterPx}px)`,
+  };
+}

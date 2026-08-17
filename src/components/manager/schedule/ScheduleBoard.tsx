@@ -21,6 +21,8 @@ import {
   formatShortMinutes,
   isUpcomingUnassigned,
   isWaitingNow,
+  laneStyle,
+  layoutLanes,
   minutesToOffset,
   nextBlockStart,
   nextFreeMinute,
@@ -30,6 +32,11 @@ import {
   waitingMinutes,
   type ScheduleBlock,
 } from "@/data/schedule";
+
+/** Placeholder key for the drag preview card inside a column's lane layout. */
+const GHOST_KEY = "__drag-preview__";
+/** Small downward step so queue cards read as check-in order 1, 2, 3… */
+const QUEUE_STAGGER = 6;
 import { TurnPriorityBadge } from "@/components/manager/schedule/TurnPriorityBadge";
 import { TurnSuggestion } from "@/components/manager/schedule/TurnSuggestion";
 import {
@@ -99,6 +106,8 @@ function availabilityLine(
 function BlockCard({
   block,
   compact,
+  dense,
+  hiddenCount = 0,
   waitedFor,
   now,
   onOpen,
@@ -106,6 +115,10 @@ function BlockCard({
 }: {
   block: ScheduleBlock;
   compact?: boolean;
+  /** Narrow lane: tighten padding and drop non-essential text. */
+  dense?: boolean;
+  /** Overlapping cards in this cluster that didn't fit into a lane. */
+  hiddenCount?: number;
   waitedFor?: number | null;
   now: number | null;
   onOpen: () => void;
@@ -124,28 +137,43 @@ function BlockCard({
       onClick={onOpen}
       className={cn(
         "group relative flex h-full w-full flex-col overflow-hidden rounded-lg border px-2 py-1 text-left leading-tight shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-shadow hover:shadow-md",
+        dense && "px-1 py-0.5",
         block.isGroup &&
           cn(
             "before:absolute before:inset-y-0 before:left-0 before:w-1 before:content-['']",
             groupAccent(block.appointmentId),
           ),
-        block.isGroup && "pl-2.5",
+        block.isGroup && (dense ? "pl-1.5" : "pl-2.5"),
         visual.card,
       )}
     >
-      <span className="flex items-center gap-1 text-[10px] font-extrabold tracking-wide opacity-85">
+      <span className="flex items-center gap-1 overflow-hidden text-[10px] font-extrabold tracking-wide whitespace-nowrap opacity-85">
         {isWalkIn ? (
           <>
             <Footprints className="size-3 shrink-0" aria-hidden />
-            Walk-In
+            <span className="truncate">Walk-In</span>
           </>
         ) : (
           <>
             <CalendarDays className="size-3 shrink-0" aria-hidden />
-            {inQueue ? `Appt ${formatShortMinutes(block.start)}` : `${formatShortMinutes(block.start)}–${formatShortMinutes(block.start + block.duration)}`}
+            <span className="truncate">
+              {inQueue
+                ? `Appt ${formatShortMinutes(block.start)}`
+                : dense
+                  ? formatShortMinutes(block.start)
+                  : `${formatShortMinutes(block.start)}–${formatShortMinutes(block.start + block.duration)}`}
+            </span>
           </>
         )}
-        {block.isGroup && <Users className="size-3" aria-hidden />}
+        {block.isGroup && <Users className="size-3 shrink-0" aria-hidden />}
+        {hiddenCount > 0 && (
+          <span
+            title={`${hiddenCount} more overlapping appointment${hiddenCount > 1 ? "s" : ""} in this time range`}
+            className="ml-auto shrink-0 rounded bg-background/70 px-1 text-[9px] font-extrabold"
+          >
+            +{hiddenCount}
+          </span>
+        )}
       </span>
       <span className="flex items-center gap-1">
         <span className="min-w-0 flex-1 truncate text-xs font-extrabold">{block.guestName}</span>
@@ -214,6 +242,18 @@ export function ScheduleBoard({
   const upcoming = useMemo(
     () => blocks.filter(isUpcomingUnassigned).sort((a, b) => a.start - b.start),
     [blocks],
+  );
+  // Side-by-side lanes for unassigned cards that share a time range.
+  const upcomingLanes = useMemo(
+    () =>
+      layoutLanes(
+        upcoming.map((block) => ({
+          key: block.key,
+          start: block.start,
+          duration: block.duration,
+        })),
+      ),
+    [upcoming],
   );
   const dragged = useRef<ScheduleBlock | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -371,11 +411,11 @@ export function ScheduleBoard({
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-card">
       <div ref={scrollRef} className="max-h-[calc(100vh-13rem)] overflow-auto">
-        <div className="min-w-[56rem]">
+        <div className="min-w-[68rem]">
           <div
             className="grid"
             style={{
-              gridTemplateColumns: `4.5rem 13rem repeat(${technicians.length}, minmax(11rem, 1fr))`,
+              gridTemplateColumns: `4.5rem 24rem repeat(${technicians.length}, minmax(11rem, 1fr))`,
             }}
           >
             {/* Header row */}
@@ -531,31 +571,44 @@ export function ScheduleBoard({
                 )}
               </div>
 
-              {/* Upcoming unassigned — parked on their real scheduled time */}
-              {upcoming.map((block) => (
-                <div
-                  key={block.key}
-                  className="absolute inset-x-1 z-10"
-                  style={{
-                    top: Math.max(queueHeight + 4, minutesToOffset(block.start)),
-                    height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
-                  }}
-                >
-                  <div className="h-[calc(100%-1.1rem)]">
-                    <BlockCard
-                      block={block}
-                      compact={block.duration < 55}
-                      now={nowMinutes}
-                      onOpen={() => onOpenAppointment(block.appointmentId)}
-                      {...dragProps(block)}
-                    />
+              {/* Upcoming unassigned — parked on their real scheduled time, lanes on overlap */}
+              {upcoming.map((block) => {
+                const placement = upcomingLanes.get(block.key);
+                const laneCount = placement?.lanes ?? 1;
+                const stagger = (placement?.lane ?? 0) * QUEUE_STAGGER;
+                return (
+                  <div
+                    key={block.key}
+                    className="absolute inset-x-1 z-10"
+                    style={{
+                      top: Math.max(queueHeight + 4, minutesToOffset(block.start)) + stagger,
+                      height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
+                    }}
+                  >
+                    <div className="absolute inset-y-0" style={laneStyle(placement)}>
+                      <div className="h-[calc(100%-1.1rem)]">
+                        <BlockCard
+                          block={block}
+                          compact={block.duration < 55 || laneCount >= 3}
+                          dense={laneCount >= 3}
+                          hiddenCount={
+                            placement && placement.lane === laneCount - 1
+                              ? placement.hiddenCount
+                              : 0
+                          }
+                          now={nowMinutes}
+                          onOpen={() => onOpenAppointment(block.appointmentId)}
+                          {...dragProps(block)}
+                        />
+                      </div>
+                      <TurnSuggestion
+                        candidates={suggestions.get(block.key) ?? []}
+                        className="mt-0.5"
+                      />
+                    </div>
                   </div>
-                  <TurnSuggestion
-                    candidates={suggestions.get(block.key) ?? []}
-                    className="mt-0.5"
-                  />
-                </div>
-              ))}
+                );
+              })}
 
               {nowVisible && (
                 <div
@@ -571,6 +624,27 @@ export function ScheduleBoard({
               const techBlockouts = blockouts.filter(
                 (blockout) => blockout.technicianId === technician.id,
               );
+              // Live lane preview: fold the dragged card into this column's layout.
+              const ghost =
+                dragging && hover?.technicianId === technician.id
+                  ? {
+                      key: GHOST_KEY,
+                      start: hover.start,
+                      duration: dragging.duration,
+                    }
+                  : null;
+              const laneItems = [
+                ...columnBlocks
+                  .filter((block) => !(ghost && block.key === dragging?.key))
+                  .map((block) => ({
+                    key: block.key,
+                    start: block.start,
+                    duration: block.duration,
+                  })),
+                ...(ghost ? [ghost] : []),
+              ];
+              const lanes = layoutLanes(laneItems);
+              const ghostPlacement = ghost ? lanes.get(GHOST_KEY) : undefined;
               return (
                 <div
                   key={technician.id}
@@ -622,34 +696,57 @@ export function ScheduleBoard({
 
                   {hover?.technicianId === technician.id && (
                     <div
-                      className={cn(
-                        "pointer-events-none absolute inset-x-1 z-10 rounded-lg border-2 border-dashed",
-                        findBlockout(techBlockouts, technician.id, hover.start, 3 * SLOT_MINUTES)
-                          ? "border-destructive/70 bg-destructive/10"
-                          : "border-primary/70 bg-primary/10",
-                      )}
-                      style={{ top: minutesToOffset(hover.start), height: 3 * SLOT_HEIGHT }}
-                    />
-                  )}
-
-                  {columnBlocks.map((block) => (
-                    <div
-                      key={block.key}
-                      className="absolute inset-x-1 z-10"
+                      className="pointer-events-none absolute inset-x-1 z-10"
                       style={{
-                        top: minutesToOffset(block.start),
-                        height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
+                        top: minutesToOffset(hover.start),
+                        height: Math.max(
+                          3 * SLOT_HEIGHT,
+                          (dragging?.duration ?? 3 * SLOT_MINUTES) * PIXELS_PER_MINUTE - 3,
+                        ),
                       }}
                     >
-                      <BlockCard
-                        block={block}
-                        compact={block.duration < 55}
-                      now={nowMinutes}
-                        onOpen={() => onOpenAppointment(block.appointmentId)}
-                        {...dragProps(block)}
+                      <div
+                        className={cn(
+                          "absolute inset-y-0 rounded-lg border-2 border-dashed",
+                          findBlockout(techBlockouts, technician.id, hover.start, 3 * SLOT_MINUTES)
+                            ? "border-destructive/70 bg-destructive/10"
+                            : "border-primary/70 bg-primary/10",
+                        )}
+                        style={laneStyle(ghostPlacement)}
                       />
                     </div>
-                  ))}
+                  )}
+
+                  {columnBlocks.map((block) => {
+                    const placement = lanes.get(block.key);
+                    const laneCount = placement?.lanes ?? 1;
+                    return (
+                      <div
+                        key={block.key}
+                        className="absolute inset-x-1 z-10"
+                        style={{
+                          top: minutesToOffset(block.start),
+                          height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
+                        }}
+                      >
+                        <div className="absolute inset-y-0" style={laneStyle(placement)}>
+                          <BlockCard
+                            block={block}
+                            compact={block.duration < 55 || laneCount >= 3}
+                            dense={laneCount >= 3}
+                            hiddenCount={
+                              placement && placement.lane === laneCount - 1
+                                ? placement.hiddenCount
+                                : 0
+                            }
+                            now={nowMinutes}
+                            onOpen={() => onOpenAppointment(block.appointmentId)}
+                            {...dragProps(block)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
 
                   {nowVisible && (
                     <div
