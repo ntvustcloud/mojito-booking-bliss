@@ -1,12 +1,12 @@
-import { AlertTriangle, Clock, UserPlus, Users } from "lucide-react";
-import {
-  isGroup,
-  type Appointment,
-} from "@/data/manager-mock";
+import { useState } from "react";
+import { AlertTriangle, ChevronDown, Clock, UserPlus, Users } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { isGroup, type Appointment } from "@/data/manager-mock";
 
 type Alert = {
   id: string;
   icon: typeof AlertTriangle;
+  short: string;
   text: string;
   appointmentId?: string;
 };
@@ -24,6 +24,7 @@ function buildAlerts(appointments: Appointment[]): Alert[] {
     alerts.push({
       id: "unassigned",
       icon: UserPlus,
+      short: `${unassigned.length} unassigned`,
       text: `${unassigned.length} appointment${unassigned.length > 1 ? "s" : ""} need technician assignment`,
       appointmentId: unassigned[0]!.id,
     });
@@ -38,6 +39,7 @@ function buildAlerts(appointments: Appointment[]): Alert[] {
     alerts.push({
       id: "group",
       icon: Users,
+      short: `${groups.length} group arriving soon`,
       text: `${groups.length} group appointment${groups.length > 1 ? "s" : ""} arriving soon`,
       appointmentId: groups[0]!.id,
     });
@@ -48,6 +50,7 @@ function buildAlerts(appointments: Appointment[]): Alert[] {
     alerts.push({
       id: "starting",
       icon: Clock,
+      short: `${next.title} starting soon`,
       text: `${next.title} starts in 10 minutes`,
       appointmentId: next.id,
     });
@@ -60,6 +63,7 @@ function buildAlerts(appointments: Appointment[]): Alert[] {
     alerts.push({
       id: "waiting",
       icon: AlertTriangle,
+      short: `${waiting.length} waiting`,
       text: `${waiting.length} guest${waiting.length > 1 ? "s" : ""} waiting to be started`,
       appointmentId: waiting[0]!.id,
     });
@@ -68,6 +72,7 @@ function buildAlerts(appointments: Appointment[]): Alert[] {
   return alerts;
 }
 
+/** Compact collapsible bar so the schedule keeps the screen. */
 export function NeedsAttention({
   appointments,
   onOpen,
@@ -75,35 +80,54 @@ export function NeedsAttention({
   appointments: Appointment[];
   onOpen: (appointmentId: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const alerts = buildAlerts(appointments);
 
+  if (alerts.length === 0) {
+    return (
+      <p className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-bold text-muted-foreground">
+        All clear — nothing needs attention.
+      </p>
+    );
+  }
+
   return (
-    <section className="rounded-xl border border-border bg-card p-3">
-      <div className="flex items-center justify-between px-1 pb-2">
-        <h2 className="text-xs font-extrabold tracking-[0.12em] uppercase text-muted-foreground">
-          Needs attention
-        </h2>
-        <span className="text-xs font-bold text-muted-foreground">{alerts.length} items</span>
-      </div>
-      {alerts.length === 0 ? (
-        <p className="px-1 pb-1 text-sm text-muted-foreground">All clear right now.</p>
-      ) : (
-        <ul className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
-          {alerts.map((alert) => {
-            const Icon = alert.icon;
-            return (
-              <li key={alert.id}>
-                <button
-                  type="button"
-                  onClick={() => alert.appointmentId && onOpen(alert.appointmentId)}
-                  className="flex w-full items-center gap-2 rounded-lg border border-border bg-status-warn-bg/50 px-2.5 py-2 text-left text-sm font-semibold text-foreground transition-colors hover:bg-status-warn-bg"
-                >
-                  <Icon className="size-4 shrink-0 text-status-warn-fg" aria-hidden />
-                  <span className="leading-snug">{alert.text}</span>
-                </button>
-              </li>
-            );
-          })}
+    <section className="rounded-lg border border-status-warn-fg/25 bg-status-warn-bg/45">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+        aria-expanded={open}
+      >
+        <AlertTriangle className="size-4 shrink-0 text-status-warn-fg" aria-hidden />
+        <span className="text-xs font-extrabold text-status-warn-fg">
+          Needs Attention ({alerts.length})
+        </span>
+        <span className="min-w-0 truncate text-xs font-semibold text-status-warn-fg/80">
+          {alerts.map((alert) => alert.short).join(" · ")}
+        </span>
+        <ChevronDown
+          className={cn(
+            "ml-auto size-4 shrink-0 text-status-warn-fg transition-transform",
+            open && "rotate-180",
+          )}
+          aria-hidden
+        />
+      </button>
+      {open && (
+        <ul className="space-y-1 border-t border-status-warn-fg/20 px-2 py-2">
+          {alerts.map((alert) => (
+            <li key={alert.id}>
+              <button
+                type="button"
+                onClick={() => alert.appointmentId && onOpen(alert.appointmentId)}
+                className="flex w-full items-center gap-2 rounded-md bg-card/70 px-2.5 py-1.5 text-left text-xs font-semibold text-foreground transition-colors hover:bg-card"
+              >
+                <alert.icon className="size-3.5 shrink-0 text-status-warn-fg" aria-hidden />
+                {alert.text}
+              </button>
+            </li>
+          ))}
         </ul>
       )}
     </section>
