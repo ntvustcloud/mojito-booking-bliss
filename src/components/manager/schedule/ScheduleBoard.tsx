@@ -650,34 +650,57 @@ export function ScheduleBoard({
 
                   {hover?.technicianId === technician.id && (
                     <div
-                      className={cn(
-                        "pointer-events-none absolute inset-x-1 z-10 rounded-lg border-2 border-dashed",
-                        findBlockout(techBlockouts, technician.id, hover.start, 3 * SLOT_MINUTES)
-                          ? "border-destructive/70 bg-destructive/10"
-                          : "border-primary/70 bg-primary/10",
-                      )}
-                      style={{ top: minutesToOffset(hover.start), height: 3 * SLOT_HEIGHT }}
-                    />
-                  )}
-
-                  {columnBlocks.map((block) => (
-                    <div
-                      key={block.key}
-                      className="absolute inset-x-1 z-10"
+                      className="pointer-events-none absolute inset-x-1 z-10"
                       style={{
-                        top: minutesToOffset(block.start),
-                        height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
+                        top: minutesToOffset(hover.start),
+                        height: Math.max(
+                          3 * SLOT_HEIGHT,
+                          (dragging?.duration ?? 3 * SLOT_MINUTES) * PIXELS_PER_MINUTE - 3,
+                        ),
                       }}
                     >
-                      <BlockCard
-                        block={block}
-                        compact={block.duration < 55}
-                      now={nowMinutes}
-                        onOpen={() => onOpenAppointment(block.appointmentId)}
-                        {...dragProps(block)}
+                      <div
+                        className={cn(
+                          "absolute inset-y-0 rounded-lg border-2 border-dashed",
+                          findBlockout(techBlockouts, technician.id, hover.start, 3 * SLOT_MINUTES)
+                            ? "border-destructive/70 bg-destructive/10"
+                            : "border-primary/70 bg-primary/10",
+                        )}
+                        style={laneStyle(ghostPlacement)}
                       />
                     </div>
-                  ))}
+                  )}
+
+                  {columnBlocks.map((block) => {
+                    const placement = lanes.get(block.key);
+                    const laneCount = placement?.lanes ?? 1;
+                    return (
+                      <div
+                        key={block.key}
+                        className="absolute inset-x-1 z-10"
+                        style={{
+                          top: minutesToOffset(block.start),
+                          height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
+                        }}
+                      >
+                        <div className="absolute inset-y-0" style={laneStyle(placement)}>
+                          <BlockCard
+                            block={block}
+                            compact={block.duration < 55 || laneCount >= 3}
+                            dense={laneCount >= 3}
+                            hiddenCount={
+                              placement && placement.lane === laneCount - 1
+                                ? placement.hiddenCount
+                                : 0
+                            }
+                            now={nowMinutes}
+                            onOpen={() => onOpenAppointment(block.appointmentId)}
+                            {...dragProps(block)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
 
                   {nowVisible && (
                     <div
