@@ -21,6 +21,8 @@ import {
   formatShortMinutes,
   isUpcomingUnassigned,
   isWaitingNow,
+  laneStyle,
+  layoutLanes,
   minutesToOffset,
   nextBlockStart,
   nextFreeMinute,
@@ -30,6 +32,11 @@ import {
   waitingMinutes,
   type ScheduleBlock,
 } from "@/data/schedule";
+
+/** Placeholder key for the drag preview card inside a column's lane layout. */
+const GHOST_KEY = "__drag-preview__";
+/** Small downward step so queue cards read as check-in order 1, 2, 3… */
+const QUEUE_STAGGER = 6;
 import { TurnPriorityBadge } from "@/components/manager/schedule/TurnPriorityBadge";
 import { TurnSuggestion } from "@/components/manager/schedule/TurnSuggestion";
 import {
