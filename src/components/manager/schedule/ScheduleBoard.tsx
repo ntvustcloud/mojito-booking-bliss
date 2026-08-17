@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Clock, Users } from "lucide-react";
+import { CalendarDays, Clock, Footprints, Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { CARD_TONE, DOT_TONE } from "@/components/manager/schedule/scheduleTone";
+import {
+  queuePriority,
+  stateVisual,
+  RECOMMENDATION_VISUALS,
+} from "@/components/manager/schedule/scheduleTone";
+
 import {
   DAY_END_MINUTES,
   DAY_START_MINUTES,
@@ -95,15 +100,22 @@ function BlockCard({
   block,
   compact,
   waitedFor,
+  now,
   onOpen,
   onDragStart,
 }: {
   block: ScheduleBlock;
   compact?: boolean;
   waitedFor?: number | null;
+  now: number | null;
   onOpen: () => void;
   onDragStart: (event: React.DragEvent) => void;
 }) {
+  const visual = stateVisual(block, now);
+  const StateIcon = visual.icon;
+  const isWalkIn = block.source === "Walk-In";
+  const inQueue = waitedFor !== undefined;
+
   return (
     <button
       type="button"
@@ -118,13 +130,21 @@ function BlockCard({
             groupAccent(block.appointmentId),
           ),
         block.isGroup && "pl-2.5",
-        CARD_TONE[block.status],
+        visual.card,
       )}
     >
-      <span className="flex items-center gap-1 text-[10px] font-extrabold tracking-wide opacity-80">
-        {waitedFor !== undefined && waitedFor !== null
-          ? `Waiting ${waitedFor} min`
-          : `${formatShortMinutes(block.start)}–${formatShortMinutes(block.start + block.duration)}`}
+      <span className="flex items-center gap-1 text-[10px] font-extrabold tracking-wide opacity-85">
+        {isWalkIn ? (
+          <>
+            <Footprints className="size-3 shrink-0" aria-hidden />
+            Walk-In
+          </>
+        ) : (
+          <>
+            <CalendarDays className="size-3 shrink-0" aria-hidden />
+            {inQueue ? `Appt ${formatShortMinutes(block.start)}` : `${formatShortMinutes(block.start)}–${formatShortMinutes(block.start + block.duration)}`}
+          </>
+        )}
         {block.isGroup && <Users className="size-3" aria-hidden />}
       </span>
       <span className="flex items-center gap-1">
@@ -141,14 +161,20 @@ function BlockCard({
       {!compact && (
         <span className="truncate text-[11px] leading-tight opacity-85">{block.serviceLabel}</span>
       )}
-      <span className="mt-auto flex items-center gap-1 text-[10px] font-bold">
-        <span className={cn("size-1.5 rounded-full", DOT_TONE[block.status])} aria-hidden />
-        {block.status}
-        {block.technicianId === "any" && <span className="opacity-70">· Any tech</span>}
+      <span className="mt-auto flex flex-wrap items-center gap-x-1 text-[10px] font-bold">
+        <StateIcon className="size-3 shrink-0" aria-hidden />
+        <span className="truncate">{visual.label}</span>
+        {waitedFor !== undefined && waitedFor !== null && (
+          <span className="opacity-80">· Waiting {waitedFor} min</span>
+        )}
+        {block.technicianId === "any" && !isWalkIn && (
+          <span className="opacity-70">· Any tech</span>
+        )}
       </span>
     </button>
   );
 }
+
 
 export function ScheduleBoard({
   appointments,
@@ -175,8 +201,15 @@ export function ScheduleBoard({
 }) {
   const blocks = useMemo(() => buildBlocks(appointments), [appointments]);
   const waitingNow = useMemo(
-    () => blocks.filter(isWaitingNow).sort((a, b) => (a.waitingSince ?? a.start) - (b.waitingSince ?? b.start)),
-    [blocks],
+    () =>
+      blocks
+        .filter(isWaitingNow)
+        .sort(
+          (a, b) =>
+            queuePriority(a, nowMinutes) - queuePriority(b, nowMinutes) ||
+            (a.waitingSince ?? a.start) - (b.waitingSince ?? b.start),
+        ),
+    [blocks, nowMinutes],
   );
   const upcoming = useMemo(
     () => blocks.filter(isUpcomingUnassigned).sort((a, b) => a.start - b.start),
@@ -235,10 +268,12 @@ export function ScheduleBoard({
   const qualityTint = (technicianId: string) => {
     const quality = dragQuality.get(technicianId);
     if (!quality) return undefined;
-    if (quality === "best") return "bg-primary/10 ring-1 ring-inset ring-primary/40";
-    if (quality === "eligible") return "bg-status-info-bg/40";
-    if (quality === "limited") return "bg-status-warn-bg/40";
-    return "bg-muted/70 opacity-60";
+    if (quality === "best") return "bg-primary/10 ring-2 ring-inset ring-primary/50";
+    if (quality === "eligible")
+      return "bg-status-live-bg/45 ring-1 ring-inset ring-status-live-fg/35";
+    if (quality === "limited")
+      return "bg-status-warn-bg/45 ring-1 ring-inset ring-status-warn-fg/40";
+    return "bg-muted/70 opacity-60 ring-1 ring-inset ring-border";
   };
 
   const totalHeight = slotCount() * SLOT_HEIGHT;
@@ -401,6 +436,27 @@ export function ScheduleBoard({
                       {availabilityLine(technician, blocks, techBlockouts, nowMinutes)}
                     </span>
                   </p>
+                  {dragQuality.get(technician.id) && (
+                    <p className="mt-1 flex items-center gap-1 text-[10px] font-extrabold">
+                      {(() => {
+                        const quality = dragQuality.get(technician.id)!;
+                        const visual = RECOMMENDATION_VISUALS.find((item) => item.key === quality)!;
+                        const Icon = visual.icon;
+                        return (
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded border px-1 py-px",
+                              visual.swatch,
+                            )}
+                          >
+                            <Icon className="size-2.5 shrink-0" aria-hidden />
+                            {visual.label}
+                          </span>
+                        );
+                      })()}
+                    </p>
+                  )}
+
                 </div>
               );
             })}
@@ -457,6 +513,7 @@ export function ScheduleBoard({
                       <BlockCard
                         block={block}
                         waitedFor={waitingMinutes(block, nowMinutes)}
+                        now={nowMinutes}
                         onOpen={() => onOpenAppointment(block.appointmentId)}
                         {...dragProps(block)}
                       />
@@ -488,6 +545,7 @@ export function ScheduleBoard({
                     <BlockCard
                       block={block}
                       compact={block.duration < 55}
+                      now={nowMinutes}
                       onOpen={() => onOpenAppointment(block.appointmentId)}
                       {...dragProps(block)}
                     />
@@ -586,6 +644,7 @@ export function ScheduleBoard({
                       <BlockCard
                         block={block}
                         compact={block.duration < 55}
+                      now={nowMinutes}
                         onOpen={() => onOpenAppointment(block.appointmentId)}
                         {...dragProps(block)}
                       />

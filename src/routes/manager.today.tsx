@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { NeedsAttention } from "@/components/manager/NeedsAttention";
 import { AppointmentDrawer } from "@/components/manager/AppointmentDrawer";
 import { WalkInDialog, type WalkInDraft } from "@/components/manager/WalkInDialog";
+import { ColorGuide } from "@/components/manager/schedule/ColorGuide";
+
 import {
   ScheduleBoard,
   type MoveRequest,
@@ -292,7 +294,9 @@ function TodayBoard() {
             {stats.availableTechs} Available Techs
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <ColorGuide />
+
           <Button variant="outline" className="h-9 rounded-lg" onClick={() => setWalkInOpen(true)}>
             <UserPlus className="size-4" aria-hidden />
             Walk-In
