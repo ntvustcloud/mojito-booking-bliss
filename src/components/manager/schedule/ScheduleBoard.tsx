@@ -61,7 +61,7 @@ function BlockCard({
       onDragStart={onDragStart}
       onClick={onOpen}
       className={cn(
-        "group relative flex h-full w-full flex-col overflow-hidden rounded-lg border px-2 py-1.5 text-left shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-shadow hover:shadow-md",
+        "group relative flex h-full w-full flex-col overflow-hidden rounded-lg border px-2 py-1 text-left leading-tight shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-shadow hover:shadow-md",
         block.isGroup &&
           cn(
             "before:absolute before:inset-y-0 before:left-0 before:w-1 before:content-['']",

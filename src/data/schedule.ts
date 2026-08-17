@@ -16,7 +16,7 @@ import {
 export const DAY_START_MINUTES = 9 * 60; // 9:00 AM
 export const DAY_END_MINUTES = 20 * 60; // 8:00 PM
 export const SLOT_MINUTES = 15;
-export const PIXELS_PER_MINUTE = 1.3;
+export const PIXELS_PER_MINUTE = 1.6;
 export const SLOT_HEIGHT = SLOT_MINUTES * PIXELS_PER_MINUTE;
 export const MIN_CARD_MINUTES = 20;
 
