@@ -411,7 +411,7 @@ export function ScheduleBoard({
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-card">
       <div ref={scrollRef} className="max-h-[calc(100vh-13rem)] overflow-auto">
-        <div className="min-w-[56rem]">
+        <div className="min-w-[68rem]">
           <div
             className="grid"
             style={{
