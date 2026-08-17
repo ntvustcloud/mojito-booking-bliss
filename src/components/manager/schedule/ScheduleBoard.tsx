@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Clock, Footprints, Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { queuePriority, stateVisual } from "@/components/manager/schedule/scheduleTone";
+import {
+  queuePriority,
+  stateVisual,
+  RECOMMENDATION_VISUALS,
+} from "@/components/manager/schedule/scheduleTone";
+
 import {
   DAY_END_MINUTES,
   DAY_START_MINUTES,
