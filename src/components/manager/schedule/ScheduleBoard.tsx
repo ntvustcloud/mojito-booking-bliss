@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Clock, Users } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { CARD_TONE, DOT_TONE } from "@/components/manager/schedule/scheduleTone";
 import {
@@ -9,24 +10,32 @@ import {
   SLOT_HEIGHT,
   SLOT_MINUTES,
   buildBlocks,
+  findBlockout,
   findConflict,
   formatMinutes,
   formatShortMinutes,
-  isQueued,
+  isUpcomingUnassigned,
+  isWaitingNow,
   minutesToOffset,
+  nextBlockStart,
   nextFreeMinute,
   offsetToMinutes,
   slotCount,
   snapToSlot,
+  waitingMinutes,
   type ScheduleBlock,
 } from "@/data/schedule";
-import type { Appointment, TechnicianRow } from "@/data/manager-mock";
+import {
+  technicianName,
+  type Appointment,
+  type TechnicianBlockout,
+  type TechnicianRow,
+} from "@/data/manager-mock";
 
 export type MoveRequest = {
   block: ScheduleBlock;
   technicianId: string;
   start: number;
-  conflictWith?: ScheduleBlock;
 };
 
 const GROUP_ACCENTS = [
@@ -43,14 +52,43 @@ function groupAccent(appointmentId: string) {
   return GROUP_ACCENTS[index]!;
 }
 
+/** Compact "can this tech take a walk-in?" line under the technician name. */
+function availabilityLine(
+  technician: TechnicianRow,
+  blocks: ScheduleBlock[],
+  blockouts: TechnicianBlockout[],
+  now: number | null,
+): string {
+  const from = now ?? DAY_START_MINUTES;
+  if (technician.state === "Off") return "Off today";
+  if (technician.state === "Break") {
+    const current = blockouts.find(
+      (blockout) => blockout.kind === "Break" && from >= blockout.start && from < blockout.end,
+    );
+    const back = current?.end ?? blockouts.find((blockout) => blockout.start >= from)?.end;
+    return back ? `Back at ${formatShortMinutes(back)}` : "On break";
+  }
+  if (technician.state === "In Service") {
+    const free = nextFreeMinute(blocks, technician.id, from);
+    return free > from ? `Free around ${formatShortMinutes(free)}` : "Wrapping up";
+  }
+  const next = nextBlockStart(blocks, technician.id, from);
+  const nextBreak = blockouts.find((blockout) => blockout.start >= from);
+  if (next !== null) return `Next ${formatShortMinutes(next)}`;
+  if (nextBreak) return `Open until ${formatShortMinutes(nextBreak.start)}`;
+  return "Open rest of day";
+}
+
 function BlockCard({
   block,
   compact,
+  waitedFor,
   onOpen,
   onDragStart,
 }: {
   block: ScheduleBlock;
   compact?: boolean;
+  waitedFor?: number | null;
   onOpen: () => void;
   onDragStart: (event: React.DragEvent) => void;
 }) {
@@ -72,7 +110,9 @@ function BlockCard({
       )}
     >
       <span className="flex items-center gap-1 text-[10px] font-extrabold tracking-wide opacity-80">
-        {formatShortMinutes(block.start)}–{formatShortMinutes(block.start + block.duration)}
+        {waitedFor !== undefined && waitedFor !== null
+          ? `Waiting ${waitedFor} min`
+          : `${formatShortMinutes(block.start)}–${formatShortMinutes(block.start + block.duration)}`}
         {block.isGroup && <Users className="size-3" aria-hidden />}
       </span>
       <span className="truncate text-xs font-extrabold">{block.guestName}</span>
@@ -82,6 +122,7 @@ function BlockCard({
       <span className="mt-auto flex items-center gap-1 text-[10px] font-bold">
         <span className={cn("size-1.5 rounded-full", DOT_TONE[block.status])} aria-hidden />
         {block.status}
+        {block.technicianId === "any" && <span className="opacity-70">· Any tech</span>}
       </span>
     </button>
   );
@@ -90,21 +131,33 @@ function BlockCard({
 export function ScheduleBoard({
   appointments,
   technicians,
+  blockouts,
   nowMinutes,
   onOpenAppointment,
   onMove,
   onCreateAt,
+  registerScrollToNow,
 }: {
   appointments: Appointment[];
   technicians: TechnicianRow[];
+  blockouts: TechnicianBlockout[];
   nowMinutes: number | null;
   onOpenAppointment: (appointmentId: string) => void;
   onMove: (request: MoveRequest) => void;
   onCreateAt: (technicianId: string, start: number) => void;
+  registerScrollToNow?: (scrollToNow: (() => void) | null) => void;
 }) {
   const blocks = useMemo(() => buildBlocks(appointments), [appointments]);
-  const queue = useMemo(() => blocks.filter(isQueued).sort((a, b) => a.start - b.start), [blocks]);
+  const waitingNow = useMemo(
+    () => blocks.filter(isWaitingNow).sort((a, b) => (a.waitingSince ?? a.start) - (b.waitingSince ?? b.start)),
+    [blocks],
+  );
+  const upcoming = useMemo(
+    () => blocks.filter(isUpcomingUnassigned).sort((a, b) => a.start - b.start),
+    [blocks],
+  );
   const dragged = useRef<ScheduleBlock | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const [hover, setHover] = useState<{ technicianId: string; start: number } | null>(null);
 
   const totalHeight = slotCount() * SLOT_HEIGHT;
@@ -113,6 +166,30 @@ export function ScheduleBoard({
     for (let m = DAY_START_MINUTES; m < DAY_END_MINUTES; m += SLOT_MINUTES) list.push(m);
     return list;
   }, []);
+
+  const nowVisible =
+    nowMinutes !== null && nowMinutes >= DAY_START_MINUTES && nowMinutes <= DAY_END_MINUTES;
+
+  // Scroll so "now" sits just below the header, keeping recent history in view.
+  const scrollToNow = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container || nowMinutes === null) return;
+    const target = minutesToOffset(nowMinutes) - 90;
+    container.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
+  }, [nowMinutes]);
+
+  useEffect(() => {
+    registerScrollToNow?.(nowVisible ? scrollToNow : null);
+    return () => registerScrollToNow?.(null);
+  }, [registerScrollToNow, scrollToNow, nowVisible]);
+
+  // One-time auto-scroll on open during business hours.
+  const autoScrolled = useRef(false);
+  useEffect(() => {
+    if (autoScrolled.current || !nowVisible) return;
+    autoScrolled.current = true;
+    scrollToNow();
+  }, [nowVisible, scrollToNow]);
 
   const startFromEvent = useCallback((event: React.DragEvent | React.MouseEvent) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -127,16 +204,40 @@ export function ScheduleBoard({
     if (!block) return;
     const start = technicianId === "any" ? block.start : startFromEvent(event);
     if (block.technicianId === technicianId && block.start === start) return;
-    const conflict =
-      technicianId === "any"
-        ? null
-        : findConflict(blocks, technicianId, start, block.duration, block.key);
-    onMove({ block, technicianId, start, ...(conflict ? { conflictWith: conflict } : {}) });
+
+    if (technicianId !== "any") {
+      const blocked = findBlockout(blockouts, technicianId, start, block.duration);
+      if (blocked) {
+        toast.error(
+          `${technicianName(technicianId)} is unavailable at this time (${blocked.label} ${formatShortMinutes(blocked.start)}–${formatShortMinutes(blocked.end)}).`,
+        );
+        return;
+      }
+      const conflict = findConflict(blocks, technicianId, start, block.duration, block.key);
+      if (conflict) {
+        toast.error(
+          `This conflicts with ${conflict.guestName} at ${formatShortMinutes(conflict.start)}.`,
+        );
+        return;
+      }
+    }
+
+    onMove({ block, technicianId, start });
+  }
+
+  function dragProps(block: ScheduleBlock) {
+    return {
+      onDragStart: (event: React.DragEvent) => {
+        dragged.current = block;
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", block.key);
+      },
+    };
   }
 
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="max-h-[calc(100vh-13rem)] overflow-auto">
+      <div ref={scrollRef} className="max-h-[calc(100vh-13rem)] overflow-auto">
         <div className="min-w-[56rem]">
           <div
             className="grid"
@@ -154,10 +255,14 @@ export function ScheduleBoard({
               <p className="text-[11px] font-extrabold tracking-wide uppercase text-muted-foreground">
                 Waiting / Unassigned
               </p>
-              <p className="text-[11px] font-bold text-status-warn-fg">{queue.length} in queue</p>
+              <p className="text-[11px] font-bold text-status-warn-fg">
+                {waitingNow.length} waiting now · {upcoming.length} upcoming
+              </p>
             </div>
             {technicians.map((technician) => {
-              const free = nextFreeMinute(blocks, technician.id, nowMinutes ?? DAY_START_MINUTES);
+              const techBlockouts = blockouts.filter(
+                (blockout) => blockout.technicianId === technician.id,
+              );
               return (
                 <div
                   key={technician.id}
@@ -174,7 +279,7 @@ export function ScheduleBoard({
                   <p className="mt-0.5 flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
                     <span
                       className={cn(
-                        "size-1.5 rounded-full",
+                        "size-1.5 shrink-0 rounded-full",
                         technician.state === "Available" && "bg-status-live-fg",
                         technician.state === "In Service" && "bg-status-info-fg",
                         technician.state === "Break" && "bg-status-warn-fg",
@@ -182,10 +287,10 @@ export function ScheduleBoard({
                       )}
                       aria-hidden
                     />
-                    {technician.state}
-                    {technician.state === "In Service" && nowMinutes !== null && free > nowMinutes
-                      ? ` · free ~${formatShortMinutes(free)}`
-                      : ""}
+                    <span className="truncate">
+                      {technician.state} ·{" "}
+                      {availabilityLine(technician, blocks, techBlockouts, nowMinutes)}
+                    </span>
                   </p>
                 </div>
               );
@@ -212,48 +317,81 @@ export function ScheduleBoard({
                   )}
                 </div>
               ))}
-              {nowMinutes !== null &&
-                nowMinutes >= DAY_START_MINUTES &&
-                nowMinutes <= DAY_END_MINUTES && (
-                  <span
-                    className="absolute right-1 z-20 -translate-y-1/2 rounded bg-destructive px-1 py-0.5 text-[10px] font-extrabold text-destructive-foreground"
-                    style={{ top: minutesToOffset(nowMinutes) }}
-                  >
-                    {formatMinutes(nowMinutes)}
-                  </span>
-                )}
+              {nowVisible && (
+                <span
+                  className="absolute right-1 z-20 -translate-y-1/2 rounded bg-destructive px-1 py-0.5 text-[10px] font-extrabold text-destructive-foreground"
+                  style={{ top: minutesToOffset(nowMinutes!) }}
+                >
+                  {formatMinutes(nowMinutes!)}
+                </span>
+              )}
             </div>
 
-            {/* Waiting queue column */}
+            {/* Waiting queue + upcoming unassigned column */}
             <div
               onDragOver={(event) => event.preventDefault()}
               onDrop={(event) => handleDrop(event, "any")}
-              className="space-y-2 border-r border-border bg-status-warn-bg/20 p-2"
+              className="relative border-r border-border bg-status-warn-bg/20"
               style={{ height: totalHeight }}
             >
-              {queue.map((block) => (
-                <div key={block.key} className="h-[4.5rem]">
+              {/* Waiting now — a live queue stacked at the top of the column */}
+              <div className="relative z-20 space-y-2 p-2">
+                <p className="text-[10px] font-extrabold tracking-[0.1em] uppercase text-status-warn-fg">
+                  Waiting now
+                </p>
+                {waitingNow.map((block) => (
+                  <div key={block.key} className="h-[4.5rem]">
+                    <BlockCard
+                      block={block}
+                      waitedFor={waitingMinutes(block, nowMinutes)}
+                      onOpen={() => onOpenAppointment(block.appointmentId)}
+                      {...dragProps(block)}
+                    />
+                  </div>
+                ))}
+                {waitingNow.length === 0 && (
+                  <p className="text-xs text-muted-foreground">Nobody waiting right now.</p>
+                )}
+                {upcoming.length > 0 && (
+                  <p className="pt-1 text-[10px] font-extrabold tracking-[0.1em] uppercase text-muted-foreground">
+                    Upcoming unassigned ↓
+                  </p>
+                )}
+              </div>
+
+              {/* Upcoming unassigned — parked on their real scheduled time */}
+              {upcoming.map((block) => (
+                <div
+                  key={block.key}
+                  className="absolute inset-x-1 z-10"
+                  style={{
+                    top: minutesToOffset(block.start),
+                    height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
+                  }}
+                >
                   <BlockCard
                     block={block}
+                    compact={block.duration < 55}
                     onOpen={() => onOpenAppointment(block.appointmentId)}
-                    onDragStart={(event) => {
-                      dragged.current = block;
-                      event.dataTransfer.effectAllowed = "move";
-                      event.dataTransfer.setData("text/plain", block.key);
-                    }}
+                    {...dragProps(block)}
                   />
                 </div>
               ))}
-              {queue.length === 0 && (
-                <p className="px-1 py-2 text-xs text-muted-foreground">
-                  Nobody waiting — every guest has a technician.
-                </p>
+
+              {nowVisible && (
+                <div
+                  className="pointer-events-none absolute inset-x-0 z-20 h-0 border-t-2 border-destructive/70"
+                  style={{ top: minutesToOffset(nowMinutes!) }}
+                />
               )}
             </div>
 
             {/* Technician columns */}
             {technicians.map((technician) => {
               const columnBlocks = blocks.filter((block) => block.technicianId === technician.id);
+              const techBlockouts = blockouts.filter(
+                (blockout) => blockout.technicianId === technician.id,
+              );
               return (
                 <div
                   key={technician.id}
@@ -281,9 +419,33 @@ export function ScheduleBoard({
                     />
                   ))}
 
+                  {/* Break / off-shift blocks — not bookable */}
+                  {techBlockouts.map((blockout) => (
+                    <div
+                      key={blockout.id}
+                      className="pointer-events-none absolute inset-x-1 z-[5] flex items-center justify-center overflow-hidden rounded-md border border-dashed border-border bg-muted/80 bg-[repeating-linear-gradient(135deg,transparent,transparent_6px,rgb(0_0_0/0.04)_6px,rgb(0_0_0/0.04)_12px)]"
+                      style={{
+                        top: minutesToOffset(blockout.start),
+                        height: (blockout.end - blockout.start) * PIXELS_PER_MINUTE - 3,
+                      }}
+                    >
+                      <span className="px-1 text-center text-[10px] font-extrabold tracking-[0.1em] uppercase text-muted-foreground">
+                        {blockout.label}
+                        <span className="block text-[9px] tracking-normal normal-case opacity-80">
+                          {formatShortMinutes(blockout.start)}–{formatShortMinutes(blockout.end)}
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+
                   {hover?.technicianId === technician.id && (
                     <div
-                      className="pointer-events-none absolute inset-x-1 z-10 rounded-lg border-2 border-dashed border-primary/70 bg-primary/10"
+                      className={cn(
+                        "pointer-events-none absolute inset-x-1 z-10 rounded-lg border-2 border-dashed",
+                        findBlockout(techBlockouts, technician.id, hover.start, 3 * SLOT_MINUTES)
+                          ? "border-destructive/70 bg-destructive/10"
+                          : "border-primary/70 bg-primary/10",
+                      )}
                       style={{ top: minutesToOffset(hover.start), height: 3 * SLOT_HEIGHT }}
                     />
                   )}
@@ -301,23 +463,17 @@ export function ScheduleBoard({
                         block={block}
                         compact={block.duration < 55}
                         onOpen={() => onOpenAppointment(block.appointmentId)}
-                        onDragStart={(event) => {
-                          dragged.current = block;
-                          event.dataTransfer.effectAllowed = "move";
-                          event.dataTransfer.setData("text/plain", block.key);
-                        }}
+                        {...dragProps(block)}
                       />
                     </div>
                   ))}
 
-                  {nowMinutes !== null &&
-                    nowMinutes >= DAY_START_MINUTES &&
-                    nowMinutes <= DAY_END_MINUTES && (
-                      <div
-                        className="pointer-events-none absolute inset-x-0 z-20 h-0 border-t-2 border-destructive/70"
-                        style={{ top: minutesToOffset(nowMinutes) }}
-                      />
-                    )}
+                  {nowVisible && (
+                    <div
+                      className="pointer-events-none absolute inset-x-0 z-20 h-0 border-t-2 border-destructive/70"
+                      style={{ top: minutesToOffset(nowMinutes!) }}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -327,7 +483,7 @@ export function ScheduleBoard({
       <p className="flex items-center gap-1.5 border-t border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
         <Clock className="size-3.5" aria-hidden />
         Drag a card to another technician or time to reassign — snaps to {SLOT_MINUTES} minutes.
-        Click empty space to start a new appointment.
+        Breaks and off-shift blocks can&apos;t take appointments.
       </p>
     </section>
   );

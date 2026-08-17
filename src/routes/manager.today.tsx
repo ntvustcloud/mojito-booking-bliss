@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, Plus, UserPlus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Crosshair, Plus, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -20,6 +20,7 @@ import {
 } from "@/components/manager/schedule/ScheduleBoard";
 import { formatMinutes, snapToSlot } from "@/data/schedule";
 import {
+  technicianBlockouts,
   technicianName,
   technicianRows,
   technicianShifts,
@@ -51,8 +52,9 @@ function TodayBoard() {
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [appointmentOpen, setAppointmentOpen] = useState(false);
   const [newSlot, setNewSlot] = useState<{ technicianId: string; start: number } | null>(null);
-  const [pendingMove, setPendingMove] = useState<MoveRequest | null>(null);
   const [dayOffset, setDayOffset] = useState(0);
+  const scrollToNowRef = useRef<(() => void) | null>(null);
+  const [canScrollToNow, setCanScrollToNow] = useState(false);
   const [nowMinutes, setNowMinutes] = useState<number | null>(null);
   const [dateLabel, setDateLabel] = useState("");
 
@@ -108,8 +110,13 @@ function TodayBoard() {
     );
   }
 
-  function applyMove(request: MoveRequest) {
+  function handleMove(request: MoveRequest) {
     const { block, technicianId, start } = request;
+    const previous = {
+      technicianId: block.technicianId,
+      startMinutes: block.start,
+      status: block.status,
+    };
     updateGuest(block.appointmentId, block.guestId, {
       technicianId,
       startMinutes: start,
@@ -121,17 +128,24 @@ function TodayBoard() {
     toast.success(
       technicianId === "any"
         ? `${block.guestName} moved back to waiting`
-        : `${block.guestName} → ${technicianName(technicianId)} at ${formatMinutes(start)}`,
+        : `${block.guestName} assigned to ${technicianName(technicianId)} at ${formatMinutes(start)}`,
+      {
+        duration: 6000,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            updateGuest(block.appointmentId, block.guestId, previous);
+            toast.info(`${block.guestName} move undone`);
+          },
+        },
+      },
     );
   }
 
-  function handleMove(request: MoveRequest) {
-    if (request.conflictWith) {
-      setPendingMove(request);
-      return;
-    }
-    applyMove(request);
-  }
+  const registerScrollToNow = useCallback((scrollToNow: (() => void) | null) => {
+    scrollToNowRef.current = scrollToNow;
+    setCanScrollToNow(Boolean(scrollToNow));
+  }, []);
 
   function handleWalkIn(draft: WalkInDraft) {
     const now = new Date();
@@ -191,6 +205,16 @@ function TodayBoard() {
                 <ChevronRight className="size-4" aria-hidden />
               </button>
             </div>
+            {dayOffset === 0 && canScrollToNow && (
+              <Button
+                variant="outline"
+                className="h-8 rounded-lg px-2 text-xs"
+                onClick={() => scrollToNowRef.current?.()}
+              >
+                <Crosshair className="size-3.5" aria-hidden />
+                Now
+              </Button>
+            )}
             {dayOffset !== 0 && (
               <Button
                 variant="ghost"
@@ -237,6 +261,8 @@ function TodayBoard() {
         <ScheduleBoard
           appointments={appointments}
           technicians={rows}
+          blockouts={technicianBlockouts}
+          registerScrollToNow={registerScrollToNow}
           nowMinutes={dayOffset === 0 ? nowMinutes : null}
           onOpenAppointment={(id) => setOpenId(id)}
           onMove={handleMove}
@@ -270,37 +296,6 @@ function TodayBoard() {
       />
 
       <WalkInDialog open={walkInOpen} onOpenChange={setWalkInOpen} onSubmit={handleWalkIn} />
-
-      {/* Conflict feedback on drop */}
-      <Dialog open={Boolean(pendingMove)} onOpenChange={(open) => !open && setPendingMove(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Time conflict</DialogTitle>
-            <DialogDescription>
-              {pendingMove &&
-                `This time conflicts with ${technicianName(pendingMove.technicianId)}'s ${pendingMove.conflictWith?.guestName} appointment at ${formatMinutes(pendingMove.conflictWith?.start ?? 0)}. Choose another time, or move it anyway.`}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              className="rounded-lg"
-              onClick={() => setPendingMove(null)}
-            >
-              Cancel move
-            </Button>
-            <Button
-              className="rounded-lg"
-              onClick={() => {
-                if (pendingMove) applyMove(pendingMove);
-                setPendingMove(null);
-              }}
-            >
-              Move anyway
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={appointmentOpen} onOpenChange={setAppointmentOpen}>
         <DialogContent className="max-w-md">

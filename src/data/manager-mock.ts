@@ -42,6 +42,8 @@ export type BookingGuest = {
   startedAt?: string;
   /** Optional per-guest start (minutes from midnight) when rescheduled on the board. */
   startMinutes?: number;
+  /** When the guest physically started waiting (minutes from midnight). */
+  waitingSinceMinutes?: number;
 };
 
 export type Appointment = {
@@ -153,8 +155,9 @@ export const todayAppointments: Appointment[] = [
         id: "g-2",
         name: "Jessica Alvarez",
         serviceIds: ["gel-manicure"],
-        technicianId: "linh",
+        technicianId: "any",
         status: "Waiting",
+        waitingSinceMinutes: 570,
       },
     ],
   },
@@ -226,6 +229,7 @@ export const todayAppointments: Appointment[] = [
         serviceIds: ["gel-x-full-set", "nail-art-simple"],
         technicianId: "any",
         status: "Checked In",
+        waitingSinceMinutes: 675,
       },
     ],
   },
@@ -366,6 +370,32 @@ export const technicianShifts: TechnicianShift[] = [
   { technicianId: "tran", state: "Available" },
   { technicianId: "rosa", state: "Break" },
 ];
+
+export type BlockoutKind = "Break" | "Off" | "Unavailable";
+
+/** Non-bookable stretches of a technician's day, rendered as blocks on the board. */
+export type TechnicianBlockout = {
+  id: string;
+  technicianId: string;
+  kind: BlockoutKind;
+  label: string;
+  /** Minutes from midnight. */
+  start: number;
+  end: number;
+};
+
+export const technicianBlockouts: TechnicianBlockout[] = [
+  { id: "bo-mai-lunch", technicianId: "mai", kind: "Break", label: "Break", start: 750, end: 780 },
+  { id: "bo-linh-lunch", technicianId: "linh", kind: "Break", label: "Break", start: 810, end: 840 },
+  { id: "bo-rosa-lunch", technicianId: "rosa", kind: "Break", label: "Break", start: 720, end: 780 },
+  { id: "bo-tran-off", technicianId: "tran", kind: "Off", label: "Off shift", start: 1020, end: 1200 },
+];
+
+export function blockoutsFor(technicianId: string): TechnicianBlockout[] {
+  return technicianBlockouts
+    .filter((blockout) => blockout.technicianId === technicianId)
+    .sort((a, b) => a.start - b.start);
+}
 
 export type TechnicianRow = {
   id: string;
