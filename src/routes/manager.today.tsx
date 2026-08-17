@@ -172,6 +172,14 @@ function TodayBoard() {
         : `${block.guestName} assigned to ${technicianName(technicianId)} at ${formatMinutes(start)}`,
       {
         duration: 6000,
+        ...(technicianId !== "any"
+          ? {
+              description:
+                block.requestedTechnicianId === technicianId
+                  ? `Requested technician · +0.5 turn`
+                  : `Salon assigned · +1.0 turn`,
+            }
+          : {}),
         action: {
           label: "Undo",
           onClick: () => {

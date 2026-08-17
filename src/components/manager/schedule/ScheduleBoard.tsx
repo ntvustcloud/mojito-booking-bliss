@@ -296,7 +296,7 @@ export function ScheduleBoard({
       const conflict = findConflict(blocks, technicianId, start, block.duration, block.key);
       if (conflict) {
         toast.error(
-          `This conflicts with ${conflict.guestName} at ${formatShortMinutes(conflict.start)}.`,
+          `${technicianName(technicianId)} has ${conflict.guestName} at ${formatShortMinutes(conflict.start)}. This service needs about ${block.duration} minutes.`,
         );
         return;
       }
