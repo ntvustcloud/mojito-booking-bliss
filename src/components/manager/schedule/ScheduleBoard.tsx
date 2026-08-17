@@ -431,7 +431,7 @@ export function ScheduleBoard({
               style={{ height: totalHeight }}
             >
               {/* Waiting now — a live queue stacked at the top of the column */}
-              <div className="relative z-20 space-y-2 p-2">
+              <div className="relative z-30 space-y-2 p-2">
                 <p className="text-[10px] font-extrabold tracking-[0.1em] uppercase text-status-warn-fg">
                   Waiting now
                 </p>
