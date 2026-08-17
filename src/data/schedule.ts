@@ -4,6 +4,7 @@ import {
   type Appointment,
   type AppointmentStatus,
   type BookingGuest,
+  type TechnicianBlockout,
 } from "@/data/manager-mock";
 
 /**
@@ -69,6 +70,7 @@ export type ScheduleBlock = {
   serviceLabel: string;
   technicianId: string;
   status: AppointmentStatus;
+  waitingSince?: number;
   start: number;
   duration: number;
   source: Appointment["source"];
@@ -89,6 +91,9 @@ export function buildBlocks(appointments: Appointment[]): ScheduleBlock[] {
         serviceLabel: guestServiceLabel(guest),
         technicianId: guest.technicianId,
         status: guest.status,
+        ...(guest.waitingSinceMinutes !== undefined
+          ? { waitingSince: guest.waitingSinceMinutes }
+          : {}),
         start: guest.startMinutes ?? appointment.minutes,
         duration: guestDuration(guest),
         source: appointment.source,
@@ -102,6 +107,39 @@ export const isActiveBlock = (block: ScheduleBlock) => !TERMINAL_STATUSES.includ
 /** Unassigned queue: "any technician" guests who still need a chair. */
 export const isQueued = (block: ScheduleBlock) =>
   block.technicianId === "any" && isActiveBlock(block);
+
+/** Guests physically in the salon without a chair — a live queue. */
+const PRESENT_STATUSES: AppointmentStatus[] = ["Waiting", "Checked In"];
+
+export const isWaitingNow = (block: ScheduleBlock) =>
+  isQueued(block) && PRESENT_STATUSES.includes(block.status);
+
+/** Future bookings that still need a technician — stay on their timeline slot. */
+export const isUpcomingUnassigned = (block: ScheduleBlock) =>
+  isQueued(block) && !PRESENT_STATUSES.includes(block.status);
+
+/** Minutes a present guest has been waiting, or null when unknown. */
+export function waitingMinutes(block: ScheduleBlock, now: number | null): number | null {
+  const since = block.waitingSince ?? block.start;
+  if (now === null || since > now) return null;
+  return Math.round(now - since);
+}
+
+/** First blockout (break / off shift) overlapping the proposed placement. */
+export function findBlockout(
+  blockouts: TechnicianBlockout[],
+  technicianId: string,
+  start: number,
+  duration: number,
+): TechnicianBlockout | null {
+  const end = start + duration;
+  return (
+    blockouts.find(
+      (blockout) =>
+        blockout.technicianId === technicianId && start < blockout.end && end > blockout.start,
+    ) ?? null
+  );
+}
 
 export function blocksForTechnician(
   blocks: ScheduleBlock[],
@@ -142,4 +180,16 @@ export function nextFreeMinute(blocks: ScheduleBlock[], technicianId: string, no
     }
   }
   return cursor;
+}
+
+/** Start of the next active appointment for a technician after `from`. */
+export function nextBlockStart(
+  blocks: ScheduleBlock[],
+  technicianId: string,
+  from: number,
+): number | null {
+  const next = blocksForTechnician(blocks, technicianId).find(
+    (block) => isActiveBlock(block) && block.start >= from,
+  );
+  return next ? next.start : null;
 }
