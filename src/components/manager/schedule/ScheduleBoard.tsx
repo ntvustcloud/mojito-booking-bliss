@@ -186,6 +186,8 @@ export function ScheduleBoard({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [hover, setHover] = useState<{ technicianId: string; start: number } | null>(null);
   const [dragging, setDragging] = useState<ScheduleBlock | null>(null);
+  const queueRef = useRef<HTMLDivElement | null>(null);
+  const [queueHeight, setQueueHeight] = useState(0);
 
   // ---- Turn Recommendation System (decision support only) ----
   const totals = useMemo(() => turnTotals(turnEvents), [turnEvents]);
@@ -256,6 +258,17 @@ export function ScheduleBoard({
     const target = minutesToOffset(nowMinutes) - 90;
     container.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
   }, [nowMinutes]);
+
+  // Keep upcoming unassigned cards from sliding under the live waiting queue.
+  useEffect(() => {
+    const node = queueRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const measure = () => setQueueHeight(node.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  });
 
   useEffect(() => {
     registerScrollToNow?.(nowVisible ? scrollToNow : null);
