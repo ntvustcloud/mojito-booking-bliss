@@ -571,6 +571,27 @@ export function ScheduleBoard({
               const techBlockouts = blockouts.filter(
                 (blockout) => blockout.technicianId === technician.id,
               );
+              // Live lane preview: fold the dragged card into this column's layout.
+              const ghost =
+                dragging && hover?.technicianId === technician.id
+                  ? {
+                      key: GHOST_KEY,
+                      start: hover.start,
+                      duration: dragging.duration,
+                    }
+                  : null;
+              const laneItems = [
+                ...columnBlocks
+                  .filter((block) => !(ghost && block.key === dragging?.key))
+                  .map((block) => ({
+                    key: block.key,
+                    start: block.start,
+                    duration: block.duration,
+                  })),
+                ...(ghost ? [ghost] : []),
+              ];
+              const lanes = layoutLanes(laneItems);
+              const ghostPlacement = ghost ? lanes.get(GHOST_KEY) : undefined;
               return (
                 <div
                   key={technician.id}
