@@ -225,6 +225,7 @@ export function ScheduleBoard({
   onMove,
   onCreateAt,
   onEditBlockTime,
+  onAdjustBlockTime,
   registerScrollToNow,
 }: {
   appointments: Appointment[];
@@ -237,6 +238,9 @@ export function ScheduleBoard({
   onMove: (request: MoveRequest) => void;
   onCreateAt: (technicianId: string, start: number) => void;
   onEditBlockTime: (blockout: TechnicianBlockout) => void;
+  /** Commit a resize or in-column move of block time. */
+  onAdjustBlockTime: (blockout: TechnicianBlockout, start: number, end: number) => void;
+
   registerScrollToNow?: (scrollToNow: (() => void) | null) => void;
 }) {
   const blocks = useMemo(() => buildBlocks(appointments), [appointments]);
