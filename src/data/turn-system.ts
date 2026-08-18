@@ -146,15 +146,22 @@ export type TurnCandidate = {
   /** Fairness position (#1 = next due a turn), preserved even when skipped. */
   position: number;
   total: number;
+  /** Service Total Today in dollars (service prices only). */
+  serviceTotal: number;
   quality: TurnQuality;
   recommended: boolean;
   /** e.g. "Available now", "In Service", "Break". */
   state: string;
   /** e.g. "Free until 1 PM", "Not enough time for this 50-minute service". */
   detail: string;
+  /** Start of the technician's next booking after this placement, if any. */
+  nextBooking?: number;
+  /** Plain-language "why this one" line for the recommendation explanation. */
+  reason?: string;
   /** True when the technician is skipped for this customer only. */
   priorityPreserved: boolean;
 };
+
 
 /** Last moment this technician finished an appointment before `now`. */
 function lastFinishedBefore(blocks: ScheduleBlock[], technicianId: string, now: number): number {
