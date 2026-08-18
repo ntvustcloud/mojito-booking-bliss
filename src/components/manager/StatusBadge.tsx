@@ -1,15 +1,14 @@
 import { cn } from "@/lib/utils";
-import type { AppointmentStatus, TechnicianState } from "@/data/manager-mock";
+import type { AppointmentStatus, BookingType, TechnicianState } from "@/data/manager-mock";
 
 const APPOINTMENT_TONE: Record<AppointmentStatus, string> = {
-  Scheduled: "bg-status-neutral-bg text-status-neutral-fg",
-  "Checked In": "bg-status-info-bg text-status-info-fg",
-  Waiting: "bg-status-warn-bg text-status-warn-fg",
-  Assigned: "bg-status-info-bg text-status-info-fg",
-  "In Service": "bg-status-live-bg text-status-live-fg",
-  Completed: "bg-status-done-bg text-status-done-fg",
-  Cancelled: "bg-status-off-bg text-status-off-fg",
-  "No Show": "bg-status-off-bg text-status-off-fg",
+  Scheduled: "bg-status-info-bg text-status-info-fg",
+  Cancelled: "bg-destructive/10 text-destructive",
+};
+
+const BOOKING_TONE: Record<BookingType, string> = {
+  Appointment: "bg-status-info-bg text-status-info-fg",
+  "Walk-In": "bg-status-warn-bg text-status-warn-fg",
 };
 
 const TECH_TONE: Record<TechnicianState, string> = {
@@ -30,6 +29,16 @@ export function StatusBadge({
   className?: string;
 }) {
   return <span className={cn(base, APPOINTMENT_TONE[status], className)}>{status}</span>;
+}
+
+export function BookingTypeBadge({
+  type,
+  className,
+}: {
+  type: BookingType;
+  className?: string;
+}) {
+  return <span className={cn(base, BOOKING_TONE[type], className)}>{type}</span>;
 }
 
 export function GroupBadge({ count }: { count: number }) {
