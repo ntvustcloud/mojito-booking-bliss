@@ -2,6 +2,8 @@ import {
   bookingType,
   guestScheduledMinutes,
   guestServiceLabel,
+  guestServiceValue,
+
   type Appointment,
   type AppointmentStatus,
   type BookingGuest,
