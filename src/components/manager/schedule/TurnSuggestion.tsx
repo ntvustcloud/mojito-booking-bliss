@@ -1,7 +1,9 @@
 import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { formatServiceMoney, formatTurns } from "@/data/manager-mock";
 import type { TurnCandidate } from "@/data/turn-system";
+
 
 /**
  * Subtle "★ Suggested: Linh" pill on Waiting / Unassigned cards.
@@ -30,11 +32,16 @@ export function TurnSuggestion({
           {best ? `Suggested: ${best.name}` : "No technician available now"}
         </span>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 p-3">
+      <PopoverContent align="start" className="w-80 p-3">
         <p className="text-xs font-extrabold text-foreground">Recommended technicians</p>
         <p className="mt-0.5 text-[10px] font-semibold text-muted-foreground">
-          Fairness order · you decide by dragging the card.
+          Turn fairness first, service total breaks ties · you decide by dragging the card.
         </p>
+        {best?.reason && (
+          <p className="mt-2 rounded-md bg-primary/10 px-2 py-1 text-[10px] font-extrabold text-primary">
+            Why {best.name}: {best.reason}
+          </p>
+        )}
         <ol className="mt-2 space-y-2">
           {candidates.map((candidate, index) => (
             <li key={candidate.technicianId} className="flex gap-2">
@@ -58,7 +65,8 @@ export function TurnSuggestion({
                 <span className="block text-[11px] font-extrabold text-foreground">
                   {candidate.name}
                   <span className="ml-1 font-bold text-muted-foreground">
-                    Turn #{candidate.position} · {candidate.total.toFixed(1)}
+                    Turn #{candidate.position} · {formatTurns(candidate.total)} ·{" "}
+                    {formatServiceMoney(candidate.serviceTotal)}
                   </span>
                 </span>
                 <span className="block text-[11px] font-semibold text-muted-foreground">
@@ -68,6 +76,7 @@ export function TurnSuggestion({
             </li>
           ))}
         </ol>
+
       </PopoverContent>
     </Popover>
   );

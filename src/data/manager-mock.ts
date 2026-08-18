@@ -82,6 +82,29 @@ export function guestScheduledMinutes(guest: BookingGuest): number {
   return servicesMinutes(guest.serviceIds);
 }
 
+/**
+ * Service revenue for one guest = sum of the service prices only.
+ * No tips, tax, gift cards, discounts, commission or payroll — this is the
+ * "Service Total Today" fairness figure, not technician take-home pay.
+ */
+export function guestServiceValue(guest: BookingGuest): number {
+  return guestServices(guest).reduce((sum, service) => sum + service.price, 0);
+}
+
+/** Compact money label for the board, e.g. "$185". */
+export function formatServiceMoney(amount: number): string {
+  return `$${Math.round(amount)}`;
+}
+
+/** "2½ Turns" style label — compact enough for a technician header. */
+export function formatTurns(total: number): string {
+  const whole = Math.floor(total + 1e-9);
+  const half = total - whole >= 0.5 - 1e-9;
+  const text = half ? (whole === 0 ? "½" : `${whole}½`) : String(whole);
+  return `${text} ${total === 1 ? "Turn" : "Turns"}`;
+}
+
+
 export function technicianName(id: string): string {
   if (id === "any") return "Any Available";
   return technicians.find((technician) => technician.id === id)?.name ?? "Any Available";
@@ -427,7 +450,11 @@ export const technicianCheckIns: TechnicianCheckIn[] = [
   { technicianId: "rosa", atMinutes: 540 }, // 9:00 AM
 ];
 
-/** Turn ledger for the day so far (check-ins + accepted customers). */
+/**
+ * Turn / Service ledger for the day so far (check-ins + accepted customers).
+ * Every fairness value is an EVENT, so reassigning, cancelling or undoing an
+ * assignment simply removes that event instead of patching a running total.
+ */
 export const initialTurnEvents: TurnEvent[] = [
   ...technicianCheckIns.map((checkIn) => ({
     id: `chk-${checkIn.technicianId}`,
@@ -435,6 +462,7 @@ export const initialTurnEvents: TurnEvent[] = [
     atMinutes: checkIn.atMinutes,
     kind: "Check In" as const,
     value: 0,
+    serviceValue: 0,
     label: "Checked in",
   })),
   {
@@ -443,7 +471,11 @@ export const initialTurnEvents: TurnEvent[] = [
     atMinutes: 545,
     kind: "Requested",
     value: 0.5,
-    label: "Sarah requested Mai",
+    serviceValue: 55,
+    guestKey: "apt-1:g-1",
+    guestName: "Sarah Nguyen",
+    serviceLabel: "Signature Pedicure",
+    label: "Sarah Nguyen — requested technician",
   },
   {
     id: "turn-linh-1",
@@ -451,7 +483,35 @@ export const initialTurnEvents: TurnEvent[] = [
     atMinutes: 630,
     kind: "Salon Assigned",
     value: 1,
+    serviceValue: 70,
+    guestKey: "apt-4:g-4b",
+    guestName: "Jessica",
+    serviceLabel: "Deluxe Pedicure",
     label: "Jessica (group) — salon assigned",
+  },
+  {
+    id: "turn-mai-2",
+    technicianId: "mai",
+    atMinutes: 630,
+    kind: "Requested",
+    value: 0.5,
+    serviceValue: 97,
+    guestKey: "apt-4:g-4a",
+    guestName: "Sarah",
+    serviceLabel: "Signature Pedicure + Gel Manicure",
+    label: "Sarah (group) — requested technician",
+  },
+  {
+    id: "turn-tran-1",
+    technicianId: "tran",
+    atMinutes: 630,
+    kind: "Salon Assigned",
+    value: 1,
+    serviceValue: 75,
+    guestKey: "apt-4:g-4c",
+    guestName: "Guest 3",
+    serviceLabel: "Acrylic Full Set",
+    label: "Guest 3 (group) — salon assigned",
   },
   {
     id: "turn-rosa-1",
@@ -459,6 +519,11 @@ export const initialTurnEvents: TurnEvent[] = [
     atMinutes: 720,
     kind: "Requested",
     value: 0.5,
-    label: "Daniel requested Rosa",
+    serviceValue: 30,
+    guestKey: "apt-6:g-6",
+    guestName: "Daniel Kim",
+    serviceLabel: "Classic Manicure",
+    label: "Daniel Kim — requested technician",
   },
 ];
+

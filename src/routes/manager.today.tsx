@@ -15,12 +15,26 @@ import { ColorGuide } from "@/components/manager/schedule/ColorGuide";
 
 import { ScheduleBoard, type MoveRequest } from "@/components/manager/schedule/ScheduleBoard";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   buildBlocks,
+  findConflict,
   formatMinutes,
   isWaitingNow,
   snapToSlot,
+  type ScheduleBlock,
 } from "@/data/schedule";
 import {
+  formatServiceMoney,
+  guestServiceValue,
   initialTurnEvents,
   technicianBlockouts as seedBlockouts,
   technicianCheckIns,
@@ -63,6 +77,7 @@ function TodayBoard() {
   const [bookingSeed, setBookingSeed] = useState<QuickBookingSeed | null>(null);
   const [blockOpen, setBlockOpen] = useState(false);
   const [blockSeed, setBlockSeed] = useState<BlockTimeSeed | null>(null);
+  const [pendingMove, setPendingMove] = useState<MoveRequest | null>(null);
   const [dayOffset, setDayOffset] = useState(0);
   const scrollToNowRef = useRef<(() => void) | null>(null);
   const [canScrollToNow, setCanScrollToNow] = useState(false);
@@ -132,44 +147,57 @@ function TodayBoard() {
     );
   }
 
-  /** Turn ledger only changes when a customer is actually accepted by a tech. */
-  function recordTurn(
+  /**
+   * Turn + Service ledger. Every assignment writes ONE event keyed by
+   * `appointmentId:guestId`, so reassigning, unassigning, cancelling or undoing
+   * simply drops that event — totals can never double-count or drift.
+   */
+  function recordAssignment(
+    block: ScheduleBlock,
     technicianId: string,
-    guestName: string,
-    requestedTechnicianId: string | undefined,
-    source: Appointment["source"],
     atMinutes: number,
-  ): string | null {
-    if (technicianId === "any") return null;
-    const { value, kind } = turnValueFor(technicianId, requestedTechnicianId, source);
-    const id = `turn-${technicianId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    setTurnEvents((current) => [
-      ...current,
-      {
-        id,
-        technicianId,
-        atMinutes,
-        kind,
-        value,
-        label:
-          kind === "Requested"
-            ? `${guestName} requested ${technicianName(technicianId)}`
-            : kind === "Walk-In"
-              ? `${guestName} — walk-in`
-              : `${guestName} — salon assigned`,
-      },
-    ]);
-    return id;
+  ): void {
+    const guestKey = `${block.appointmentId}:${block.guestId}`;
+    setTurnEvents((current) => {
+      const cleaned = current.filter((event) => event.guestKey !== guestKey);
+      if (technicianId === "any") return cleaned;
+      const { value, kind } = turnValueFor(technicianId, block.requestedTechnicianId, block.source);
+      return [
+        ...cleaned,
+        {
+          id: `turn-${technicianId}-${guestKey}`,
+          technicianId,
+          atMinutes,
+          kind,
+          value,
+          serviceValue: block.serviceValue,
+          guestKey,
+          guestName: block.guestName,
+          serviceLabel: block.serviceLabel,
+          label:
+            kind === "Requested"
+              ? `${block.guestName} — requested technician`
+              : kind === "Walk-In"
+                ? `${block.guestName} — walk-in`
+                : `${block.guestName} — salon assigned`,
+        },
+      ];
+    });
   }
 
-  function handleMove(request: MoveRequest) {
+  /** Drop every fairness event tied to one guest (cancel / restore flows). */
+  function clearGuestEvents(appointmentId: string, guestId: string) {
+    setTurnEvents((current) =>
+      current.filter((event) => event.guestKey !== `${appointmentId}:${guestId}`),
+    );
+  }
+
+  /** Applies a move and offers Undo restoring BOTH schedule and ledger. */
+  function applyMove(request: MoveRequest) {
     const { block, technicianId, start } = request;
-    const previous: GuestPatch = {
-      technicianId: block.technicianId,
-      startMinutes: block.technicianId === "any" ? undefined : block.start,
-    };
-    // Dropping back to Waiting clears the placement so the card returns to its
-    // original anchor time.
+    const previousAppointments = appointments;
+    const previousEvents = turnEvents;
+
     updateGuest(
       block.appointmentId,
       block.guestId,
@@ -177,13 +205,8 @@ function TodayBoard() {
         ? { technicianId: "any", startMinutes: undefined }
         : { technicianId, startMinutes: start },
     );
-    const turnId = recordTurn(
-      technicianId,
-      block.guestName,
-      block.requestedTechnicianId,
-      block.source,
-      start,
-    );
+    recordAssignment(block, technicianId, start);
+
     toast.success(
       technicianId === "any"
         ? `${block.guestName} moved back to Waiting / Unassigned (${formatMinutes(block.anchor)})`
@@ -194,21 +217,53 @@ function TodayBoard() {
           ? {
               description:
                 block.requestedTechnicianId === technicianId
-                  ? `Requested technician · +0.5 turn`
-                  : `Salon assigned · +1.0 turn`,
+                  ? `Requested technician · +0.5 turn · ${formatServiceMoney(block.serviceValue)} service`
+                  : `Salon assigned · +1.0 turn · ${formatServiceMoney(block.serviceValue)} service`,
             }
-          : {}),
+          : { description: "Turn and service credit released" }),
         action: {
           label: "Undo",
           onClick: () => {
-            updateGuest(block.appointmentId, block.guestId, previous);
-            if (turnId) setTurnEvents((current) => current.filter((event) => event.id !== turnId));
+            setAppointments(previousAppointments);
+            setTurnEvents(previousEvents);
             toast.info(`${block.guestName} move undone`);
           },
         },
       },
     );
   }
+
+  /** Reassigning or unassigning an already-placed guest always asks first. */
+  function handleMove(request: MoveRequest) {
+    if (request.kind === "reassign" || request.kind === "unassign") {
+      setPendingMove(request);
+      return;
+    }
+    applyMove(request);
+  }
+
+  function adjustBlockout(blockout: TechnicianBlockout, start: number, end: number) {
+    const conflict = findConflict(
+      buildBlocks(appointments),
+      blockout.technicianId,
+      start,
+      end - start,
+      "",
+    );
+    if (conflict) {
+      toast.error(
+        `Can't cover ${conflict.guestName} at ${formatMinutes(conflict.start)} with block time. Move that appointment first.`,
+      );
+      return;
+    }
+    setBlockouts((current) =>
+      current.map((item) => (item.id === blockout.id ? { ...item, start, end } : item)),
+    );
+    toast.success(
+      `${blockout.label} · ${formatMinutes(start)}–${formatMinutes(end)} for ${technicianName(blockout.technicianId)}`,
+    );
+  }
+
 
   const registerScrollToNow = useCallback((scrollToNow: (() => void) | null) => {
     scrollToNowRef.current = scrollToNow;
@@ -245,13 +300,32 @@ function TodayBoard() {
       },
     ]);
     if (assigned) {
-      recordTurn(
-        draft.technicianId,
+      const serviceValue = guestServiceValue({
+        id: `${id}-g`,
         name,
+        serviceIds: draft.serviceIds,
+        technicianId: draft.technicianId,
+        status: "Scheduled",
+      });
+      const { value, kind } = turnValueFor(
+        draft.technicianId,
         undefined,
         draft.type === "Walk-In" ? "Walk-In" : "Phone",
-        minutes,
       );
+      setTurnEvents((current) => [
+        ...current,
+        {
+          id: `turn-${draft.technicianId}-${id}-g`,
+          technicianId: draft.technicianId,
+          atMinutes: minutes,
+          kind,
+          value,
+          serviceValue,
+          guestKey: `${id}:${id}-g`,
+          guestName: name,
+          label: kind === "Walk-In" ? `${name} — walk-in` : `${name} — salon assigned`,
+        },
+      ]);
     }
     toast.success(
       assigned
@@ -379,6 +453,7 @@ function TodayBoard() {
             setBookingSeed({ technicianId, start });
             setBookingOpen(true);
           }}
+          onAdjustBlockTime={adjustBlockout}
           onEditBlockTime={(blockout) => {
             setBlockSeed({ blockout });
             setBlockOpen(true);
@@ -392,9 +467,11 @@ function TodayBoard() {
         onOpenChange={(open) => {
           if (!open) setOpenId(null);
         }}
-        onCancelGuest={(appointmentId, guestId) =>
-          updateGuest(appointmentId, guestId, { status: "Cancelled" })
-        }
+        onCancelGuest={(appointmentId, guestId) => {
+          updateGuest(appointmentId, guestId, { status: "Cancelled" });
+          // Cancelling releases the technician's turn and service credit.
+          clearGuestEvents(appointmentId, guestId);
+        }}
         onRestoreGuest={(appointmentId, guestId) =>
           updateGuest(appointmentId, guestId, { status: "Scheduled" })
         }
@@ -414,6 +491,37 @@ function TodayBoard() {
         nowMinutes={nowMinutes}
         onSubmit={handleBooking}
       />
+
+      {/* Reassignment safety: moving a placed guest always asks first. */}
+      <AlertDialog open={Boolean(pendingMove)} onOpenChange={(open) => !open && setPendingMove(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingMove?.kind === "unassign"
+                ? "Move back to Waiting / Unassigned?"
+                : "Reassign this customer?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingMove &&
+                (pendingMove.kind === "unassign"
+                  ? `${pendingMove.block.guestName} leaves ${technicianName(pendingMove.block.technicianId)} and returns to ${formatMinutes(pendingMove.block.anchor)} in the queue. That turn and ${formatServiceMoney(pendingMove.block.serviceValue)} of service credit are released.`
+                  : `${pendingMove.block.guestName} moves from ${technicianName(pendingMove.block.technicianId)} to ${technicianName(pendingMove.technicianId)} at ${formatMinutes(pendingMove.start)}. The turn and ${formatServiceMoney(pendingMove.block.serviceValue)} of service credit move with the customer.`)}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-lg">Keep as is</AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-lg"
+              onClick={() => {
+                if (pendingMove) applyMove(pendingMove);
+                setPendingMove(null);
+              }}
+            >
+              {pendingMove?.kind === "unassign" ? "Move to Waiting" : "Reassign"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <BlockTimeDialog
         open={blockOpen}

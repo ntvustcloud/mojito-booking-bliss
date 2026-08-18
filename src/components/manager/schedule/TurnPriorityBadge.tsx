@@ -2,6 +2,8 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatMinutes } from "@/data/schedule";
+import { formatServiceMoney, formatTurns } from "@/data/manager-mock";
+import { TurnStrip } from "@/components/manager/schedule/TurnStrip";
 import {
   checkInMinute,
   turnHistory,
@@ -11,13 +13,15 @@ import {
 
 /**
  * Compact turn-priority chip in the technician column header.
- * Click reveals check-in time, turn total and a lightweight turn history.
+ * Click reveals check-in time, turn total, Service Total Today and the full
+ * event history that produced both numbers.
  */
 export function TurnPriorityBadge({
   technicianId,
   technicianName,
   position,
   total,
+  serviceTotal,
   events,
   checkIns,
 }: {
@@ -25,6 +29,7 @@ export function TurnPriorityBadge({
   technicianName: string;
   position: number;
   total: number;
+  serviceTotal: number;
   events: TurnEvent[];
   checkIns: TechnicianCheckIn[];
 }) {
@@ -45,8 +50,9 @@ export function TurnPriorityBadge({
       >
         #{position}
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-60 p-3">
+      <PopoverContent align="end" className="w-72 p-3">
         <p className="text-xs font-extrabold text-foreground">Turn Priority #{position}</p>
+        <TurnStrip total={total} className="mt-1.5" />
         <dl className="mt-2 space-y-1 text-[11px] font-semibold text-muted-foreground">
           <div className="flex justify-between gap-2">
             <dt>Checked in</dt>
@@ -55,10 +61,18 @@ export function TurnPriorityBadge({
             </dd>
           </div>
           <div className="flex justify-between gap-2">
-            <dt>Turn total today</dt>
-            <dd className="font-extrabold text-foreground">{total.toFixed(1)}</dd>
+            <dt>Turns today</dt>
+            <dd className="font-extrabold text-foreground">{formatTurns(total)}</dd>
+          </div>
+          <div className="flex justify-between gap-2">
+            <dt>Service total today</dt>
+            <dd className="font-extrabold text-foreground">{formatServiceMoney(serviceTotal)}</dd>
           </div>
         </dl>
+        <p className="mt-1.5 text-[10px] font-semibold text-muted-foreground/80">
+          Service total is menu service prices only — not tips, tax or take-home pay. Turns lead;
+          service total only breaks ties.
+        </p>
         <button
           type="button"
           onClick={() => setShowHistory((value) => !value)}
@@ -79,10 +93,15 @@ export function TurnPriorityBadge({
                     +{event.value.toFixed(1)} turn
                   </span>
                 )}
+                {event.serviceValue > 0 && (
+                  <span className="ml-1 font-extrabold text-muted-foreground">
+                    · {formatServiceMoney(event.serviceValue)}
+                  </span>
+                )}
               </li>
             ))}
             <li className="border-t border-border pt-1.5 text-[11px] font-extrabold text-foreground">
-              Turn total: {total.toFixed(1)}
+              {formatTurns(total)} · {formatServiceMoney(serviceTotal)} service
             </li>
           </ul>
         )}

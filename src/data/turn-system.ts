@@ -28,6 +28,11 @@ import type { TechnicianBlockout, TechnicianRow } from "@/data/manager-mock";
 
 export type TurnEventKind = "Check In" | "Walk-In" | "Salon Assigned" | "Requested";
 
+/**
+ * One fairness event. Turn value AND service value are both attached to the
+ * assignment that produced them, so reassign / cancel / undo just drop the
+ * event — totals can never drift or double-count.
+ */
 export type TurnEvent = {
   id: string;
   technicianId: string;
@@ -36,6 +41,12 @@ export type TurnEvent = {
   kind: TurnEventKind;
   /** Turn value added by this event (0 for check-in). */
   value: number;
+  /** Service revenue assigned by this event, in dollars (0 for check-in). */
+  serviceValue: number;
+  /** `appointmentId:guestId` of the assignment this event belongs to. */
+  guestKey?: string;
+  guestName?: string;
+  serviceLabel?: string;
   /** Short human line for the turn history list. */
   label: string;
 };
@@ -57,6 +68,24 @@ export function turnTotals(events: TurnEvent[]): Record<string, number> {
   return totals;
 }
 
+/** "Service Total Today" per technician — service prices only, never income. */
+export function serviceTotals(events: TurnEvent[]): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const event of events) {
+    totals[event.technicianId] =
+      (totals[event.technicianId] ?? 0) + (event.serviceValue || 0);
+  }
+  return totals;
+}
+
+/**
+ * Turn buckets group "reasonably similar" turn priority. Inside one bucket the
+ * Service Total becomes the tie-breaker; across buckets turn fairness wins.
+ */
+export function turnBucket(total: number): number {
+  return Math.floor(total + 1e-9);
+}
+
 export function checkInMinute(checkIns: TechnicianCheckIn[], technicianId: string): number | null {
   return checkIns.find((item) => item.technicianId === technicianId)?.atMinutes ?? null;
 }
@@ -67,6 +96,7 @@ export function turnHistory(events: TurnEvent[], technicianId: string): TurnEven
     .sort((a, b) => a.atMinutes - b.atMinutes);
 }
 
+
 /**
  * Fairness order for the whole day: lowest turn total first, then the earliest
  * check-in. Technicians who have not checked in join the back of the rotation.
@@ -75,11 +105,17 @@ export function turnOrder(
   technicians: TechnicianRow[],
   checkIns: TechnicianCheckIn[],
   totals: Record<string, number>,
+  revenues: Record<string, number> = {},
 ): string[] {
   return [...technicians]
     .sort((a, b) => {
       const totalA = totals[a.id] ?? 0;
       const totalB = totals[b.id] ?? 0;
+      if (turnBucket(totalA) !== turnBucket(totalB)) return totalA - totalB;
+      // Same turn bucket → the lighter Service Total goes first.
+      const moneyA = revenues[a.id] ?? 0;
+      const moneyB = revenues[b.id] ?? 0;
+      if (moneyA !== moneyB) return moneyA - moneyB;
       if (totalA !== totalB) return totalA - totalB;
       const checkA = checkInMinute(checkIns, a.id);
       const checkB = checkInMinute(checkIns, b.id);
@@ -90,6 +126,7 @@ export function turnOrder(
     })
     .map((technician) => technician.id);
 }
+
 
 export function turnPositions(order: string[]): Record<string, number> {
   const positions: Record<string, number> = {};
@@ -116,15 +153,22 @@ export type TurnCandidate = {
   /** Fairness position (#1 = next due a turn), preserved even when skipped. */
   position: number;
   total: number;
+  /** Service Total Today in dollars (service prices only). */
+  serviceTotal: number;
   quality: TurnQuality;
   recommended: boolean;
   /** e.g. "Available now", "In Service", "Break". */
   state: string;
   /** e.g. "Free until 1 PM", "Not enough time for this 50-minute service". */
   detail: string;
+  /** Start of the technician's next booking after this placement, if any. */
+  nextBooking?: number;
+  /** Plain-language "why this one" line for the recommendation explanation. */
+  reason?: string;
   /** True when the technician is skipped for this customer only. */
   priorityPreserved: boolean;
 };
+
 
 /** Last moment this technician finished an appointment before `now`. */
 function lastFinishedBefore(blocks: ScheduleBlock[], technicianId: string, now: number): number {
@@ -158,7 +202,8 @@ export type TurnInput = {
 export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
   const { technicians, blocks, blockouts, checkIns, events, start, duration, serviceLabel } = input;
   const totals = turnTotals(events);
-  const positions = turnPositions(turnOrder(technicians, checkIns, totals));
+  const revenues = serviceTotals(events);
+  const positions = turnPositions(turnOrder(technicians, checkIns, totals, revenues));
   const now = input.now ?? start;
   const ignoreKey = input.ignoreKey ?? "";
 
@@ -171,9 +216,11 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
       initials: technician.initials,
       position,
       total,
+      serviceTotal: revenues[technician.id] ?? 0,
       recommended: false,
       state: technician.state === "Available" ? "Available now" : technician.state,
     };
+
 
     if (checkInMinute(checkIns, technician.id) === null) {
       return {
@@ -264,6 +311,7 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
       ...base,
       quality: gap - duration < 30 ? ("limited" as const) : ("eligible" as const),
       detail: gap - duration < 30 ? `${detail} · tight fit` : detail,
+      ...(wall === Infinity ? {} : { nextBooking: wall }),
       priorityPreserved: false,
     };
   });
@@ -271,22 +319,38 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
   const eligible = candidates
     .filter((candidate) => candidate.quality !== "ineligible")
     .sort((a, b) => {
+      // 1. Turn fairness is primary…
+      if (turnBucket(a.total) !== turnBucket(b.total)) return a.total - b.total;
+      // 2. …Service Total balances technicians on the same turn level…
+      if (a.serviceTotal !== b.serviceTotal) return a.serviceTotal - b.serviceTotal;
       if (a.total !== b.total) return a.total - b.total;
       const checkA = checkInMinute(checkIns, a.technicianId) ?? Infinity;
       const checkB = checkInMinute(checkIns, b.technicianId) ?? Infinity;
       if (checkA !== checkB) return checkA - checkB;
-      // Final tie-breaker: whoever has been idle longest.
+      // 3. Final tie-breaker: whoever has been idle longest.
       return (
         lastFinishedBefore(blocks, a.technicianId, now) -
         lastFinishedBefore(blocks, b.technicianId, now)
       );
     });
 
-  // Prefer a fully-eligible technician over a tight fit for the star pick.
-  const best = eligible.find((candidate) => candidate.quality === "eligible") ?? eligible[0];
+  // A specifically requested technician wins whenever they are eligible.
+  const requested = input.requestedTechnicianId
+    ? eligible.find((candidate) => candidate.technicianId === input.requestedTechnicianId)
+    : undefined;
+  // Otherwise prefer a fully-eligible technician over a tight fit.
+  const best =
+    requested ?? eligible.find((candidate) => candidate.quality === "eligible") ?? eligible[0];
   if (best) {
     best.recommended = true;
     best.quality = "best";
+    const runnerUp = eligible.find((candidate) => candidate !== best);
+    best.reason = requested
+      ? "Customer requested this technician"
+      : runnerUp && turnBucket(runnerUp.total) === turnBucket(best.total) &&
+          runnerUp.serviceTotal > best.serviceTotal
+        ? `Same turn count as ${runnerUp.name}, lower service total today`
+        : `Fewest turns today (${best.total.toFixed(1)}) and open time now`;
   }
 
   const skipped = candidates
@@ -295,6 +359,7 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
 
   return [...eligible, ...skipped];
 }
+
 
 /** Turn value the technician earns for accepting this customer. */
 export function turnValueFor(

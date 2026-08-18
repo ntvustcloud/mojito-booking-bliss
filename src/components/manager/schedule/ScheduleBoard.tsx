@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Clock, Footprints, Users } from "lucide-react";
+import { CalendarDays, Clock, Footprints, Heart, Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -39,8 +39,11 @@ const GHOST_KEY = "__drag-preview__";
 const QUEUE_STAGGER = 6;
 import { TurnPriorityBadge } from "@/components/manager/schedule/TurnPriorityBadge";
 import { TurnSuggestion } from "@/components/manager/schedule/TurnSuggestion";
+import { TurnStrip } from "@/components/manager/schedule/TurnStrip";
+import { BlockTimeStripe } from "@/components/manager/schedule/BlockTimeStripe";
 import {
   evaluateCandidates,
+  serviceTotals,
   turnOrder,
   turnPositions,
   turnTotals,
@@ -50,17 +53,25 @@ import {
   type TurnQuality,
 } from "@/data/turn-system";
 import {
+  formatServiceMoney,
+  formatTurns,
   technicianName,
   type Appointment,
   type TechnicianBlockout,
   type TechnicianRow,
 } from "@/data/manager-mock";
 
+
+/** What kind of change a drop represents — the route decides what to confirm. */
+export type MoveKind = "assign" | "reassign" | "unassign" | "retime";
+
 export type MoveRequest = {
   block: ScheduleBlock;
   technicianId: string;
   start: number;
+  kind: MoveKind;
 };
+
 
 const GROUP_ACCENTS = [
   "before:bg-primary",
@@ -178,13 +189,12 @@ function BlockCard({
       <span className="flex items-center gap-1">
         <span className="min-w-0 flex-1 truncate text-xs font-extrabold">{block.guestName}</span>
         {block.requestedTechnicianId === block.technicianId && (
-          <span
-            title={`Customer specifically requested ${technicianName(block.technicianId)} · \u00bd turn`}
-            className="shrink-0 rounded bg-background/60 px-1 text-[9px] font-extrabold tracking-wide uppercase"
-          >
-            Req
-          </span>
+          <Heart
+            className="size-3 shrink-0 fill-current opacity-70"
+            aria-label={`Customer specifically requested ${technicianName(block.technicianId)} · ½ turn`}
+          />
         )}
+
       </span>
       {!compact && (
         <span className="truncate text-[11px] leading-tight opacity-85">{block.serviceLabel}</span>
@@ -215,6 +225,7 @@ export function ScheduleBoard({
   onMove,
   onCreateAt,
   onEditBlockTime,
+  onAdjustBlockTime,
   registerScrollToNow,
 }: {
   appointments: Appointment[];
@@ -227,6 +238,9 @@ export function ScheduleBoard({
   onMove: (request: MoveRequest) => void;
   onCreateAt: (technicianId: string, start: number) => void;
   onEditBlockTime: (blockout: TechnicianBlockout) => void;
+  /** Commit a resize or in-column move of block time. */
+  onAdjustBlockTime: (blockout: TechnicianBlockout, start: number, end: number) => void;
+
   registerScrollToNow?: (scrollToNow: (() => void) | null) => void;
 }) {
   const blocks = useMemo(() => buildBlocks(appointments), [appointments]);
@@ -268,10 +282,12 @@ export function ScheduleBoard({
 
   // ---- Turn Recommendation System (decision support only) ----
   const totals = useMemo(() => turnTotals(turnEvents), [turnEvents]);
+  const revenues = useMemo(() => serviceTotals(turnEvents), [turnEvents]);
   const positions = useMemo(
-    () => turnPositions(turnOrder(technicians, checkIns, totals)),
-    [technicians, checkIns, totals],
+    () => turnPositions(turnOrder(technicians, checkIns, totals, revenues)),
+    [technicians, checkIns, totals, revenues],
   );
+
 
   const candidatesFor = useCallback(
     (block: ScheduleBlock): TurnCandidate[] =>
@@ -394,7 +410,17 @@ export function ScheduleBoard({
       }
     }
 
-    onMove({ block, technicianId, start });
+    const kind: MoveKind =
+      technicianId === "any"
+        ? "unassign"
+        : block.technicianId === "any"
+          ? "assign"
+          : block.technicianId === technicianId
+            ? "retime"
+            : "reassign";
+
+    onMove({ block, technicianId, start, kind });
+
   }
 
   function dragProps(block: ScheduleBlock) {
@@ -460,10 +486,21 @@ export function ScheduleBoard({
                       technicianName={technician.name}
                       position={positions[technician.id] ?? technicians.length}
                       total={totals[technician.id] ?? 0}
+                      serviceTotal={revenues[technician.id] ?? 0}
                       events={turnEvents}
                       checkIns={checkIns}
                     />
                   </div>
+                  {/* Fairness at a glance: turn strip + turns · service total */}
+                  <p className="mt-1 flex items-center gap-1.5 text-[10px] font-extrabold text-muted-foreground">
+                    <TurnStrip total={totals[technician.id] ?? 0} />
+                    <span className="truncate">
+                      {formatTurns(totals[technician.id] ?? 0)}
+                      <span className="mx-1 opacity-50">·</span>
+                      {formatServiceMoney(revenues[technician.id] ?? 0)} Service
+                    </span>
+                  </p>
+
                   <p className="mt-0.5 flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
                     <span
                       className={cn(
@@ -652,6 +689,8 @@ export function ScheduleBoard({
               return (
                 <div
                   key={technician.id}
+                  data-tech-column={technician.id}
+
                   className={cn(
                     "relative border-r border-border transition-colors last:border-r-0",
                     qualityTint(technician.id),
@@ -679,36 +718,16 @@ export function ScheduleBoard({
                     />
                   ))}
 
-                  {/* Break / off-shift blocks — not bookable */}
+                  {/* Block time — resizable, movable, click to edit. Never bookable. */}
                   {techBlockouts.map((blockout) => (
-                    <div
+                    <BlockTimeStripe
                       key={blockout.id}
-                      role="button"
-                      tabIndex={0}
-                      title={`${blockout.label} — click to edit or delete`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onEditBlockTime(blockout);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter" && event.key !== " ") return;
-                        event.preventDefault();
-                        onEditBlockTime(blockout);
-                      }}
-                      className="absolute inset-x-1 z-[5] flex cursor-pointer items-center justify-center overflow-hidden rounded-md border border-dashed border-border bg-muted/80 bg-[repeating-linear-gradient(135deg,transparent,transparent_6px,rgb(0_0_0/0.04)_6px,rgb(0_0_0/0.04)_12px)] transition-colors hover:bg-muted"
-                      style={{
-                        top: minutesToOffset(blockout.start),
-                        height: (blockout.end - blockout.start) * PIXELS_PER_MINUTE - 3,
-                      }}
-                    >
-                      <span className="px-1 text-center text-[10px] font-extrabold tracking-[0.1em] uppercase text-muted-foreground">
-                        {blockout.label}
-                        <span className="block text-[9px] tracking-normal normal-case opacity-80">
-                          {formatShortMinutes(blockout.start)}–{formatShortMinutes(blockout.end)}
-                        </span>
-                      </span>
-                    </div>
+                      blockout={blockout}
+                      onEdit={() => onEditBlockTime(blockout)}
+                      onAdjust={(start, end) => onAdjustBlockTime(blockout, start, end)}
+                    />
                   ))}
+
 
                   {hover?.technicianId === technician.id && (
                     <div

@@ -2,6 +2,8 @@ import {
   bookingType,
   guestScheduledMinutes,
   guestServiceLabel,
+  guestServiceValue,
+
   type Appointment,
   type AppointmentStatus,
   type BookingGuest,
@@ -82,9 +84,12 @@ export type ScheduleBlock = {
   anchor: number;
   start: number;
   duration: number;
+  /** Service price total for this guest — feeds the fairness Service Total. */
+  serviceValue: number;
   bookingType: BookingType;
   source: Appointment["source"];
 };
+
 
 export function buildBlocks(appointments: Appointment[]): ScheduleBlock[] {
   return appointments.flatMap((appointment) =>
@@ -109,7 +114,9 @@ export function buildBlocks(appointments: Appointment[]): ScheduleBlock[] {
         // Unassigned cards always sit on their original logical time.
         start: assigned ? (guest.startMinutes ?? appointment.minutes) : appointment.minutes,
         duration: guestDuration(guest),
+        serviceValue: guestServiceValue(guest),
         bookingType: bookingType(appointment),
+
         source: appointment.source,
       } satisfies ScheduleBlock;
     }),
