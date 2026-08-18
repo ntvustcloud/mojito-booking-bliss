@@ -1,9 +1,11 @@
 import {
-  guestServices,
+  bookingType,
+  guestScheduledMinutes,
   guestServiceLabel,
   type Appointment,
   type AppointmentStatus,
   type BookingGuest,
+  type BookingType,
   type TechnicianBlockout,
 } from "@/data/manager-mock";
 
@@ -21,7 +23,8 @@ export const PIXELS_PER_MINUTE = 1.6;
 export const SLOT_HEIGHT = SLOT_MINUTES * PIXELS_PER_MINUTE;
 export const MIN_CARD_MINUTES = 20;
 
-export const TERMINAL_STATUSES: AppointmentStatus[] = ["Completed", "Cancelled", "No Show"];
+export const TERMINAL_STATUSES: AppointmentStatus[] = ["Cancelled"];
+
 
 export function slotCount(): number {
   return (DAY_END_MINUTES - DAY_START_MINUTES) / SLOT_MINUTES;
