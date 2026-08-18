@@ -61,6 +61,7 @@ export function BlockTimeDialog({
   const [technicianId, setTechnicianId] = useState(workingTechnicians[0]?.id ?? "");
   const [kind, setKind] = useState<BlockoutKind>("Break");
   const [label, setLabel] = useState("Break");
+  const [note, setNote] = useState("");
   const [start, setStart] = useState(DAY_START_MINUTES);
   const [end, setEnd] = useState(DAY_START_MINUTES + 30);
 
@@ -70,6 +71,7 @@ export function BlockTimeDialog({
     setTechnicianId(editing?.technicianId ?? seed?.technicianId ?? workingTechnicians[0]!.id);
     setKind(editing?.kind ?? "Break");
     setLabel(editing?.label ?? "Break");
+    setNote(editing?.note ?? "");
     setStart(base);
     setEnd(editing?.end ?? Math.min(DAY_END_MINUTES, base + 30));
   }, [open, seed, editing]);
@@ -180,6 +182,16 @@ export function BlockTimeDialog({
               </Select>
             </div>
           </div>
+          <div>
+            <label className="text-xs font-bold text-muted-foreground">Note (optional)</label>
+            <Input
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="Dentist appointment, training, kids pickup…"
+              className="mt-1 h-9"
+            />
+          </div>
+
           {!valid && (
             <p className="text-xs font-bold text-destructive">End time must be after start time.</p>
           )}
@@ -214,6 +226,7 @@ export function BlockTimeDialog({
                   technicianId,
                   kind,
                   label: label.trim() || kind,
+                  ...(note.trim() ? { note: note.trim() } : {}),
                   start,
                   end,
                 });
