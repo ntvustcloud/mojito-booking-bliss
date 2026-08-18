@@ -1,7 +1,9 @@
 import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { formatServiceMoney, formatTurns } from "@/data/manager-mock";
 import type { TurnCandidate } from "@/data/turn-system";
+
 
 /**
  * Subtle "★ Suggested: Linh" pill on Waiting / Unassigned cards.
