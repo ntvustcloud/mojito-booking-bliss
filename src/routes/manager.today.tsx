@@ -132,44 +132,57 @@ function TodayBoard() {
     );
   }
 
-  /** Turn ledger only changes when a customer is actually accepted by a tech. */
-  function recordTurn(
+  /**
+   * Turn + Service ledger. Every assignment writes ONE event keyed by
+   * `appointmentId:guestId`, so reassigning, unassigning, cancelling or undoing
+   * simply drops that event — totals can never double-count or drift.
+   */
+  function recordAssignment(
+    block: ScheduleBlock,
     technicianId: string,
-    guestName: string,
-    requestedTechnicianId: string | undefined,
-    source: Appointment["source"],
     atMinutes: number,
-  ): string | null {
-    if (technicianId === "any") return null;
-    const { value, kind } = turnValueFor(technicianId, requestedTechnicianId, source);
-    const id = `turn-${technicianId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    setTurnEvents((current) => [
-      ...current,
-      {
-        id,
-        technicianId,
-        atMinutes,
-        kind,
-        value,
-        label:
-          kind === "Requested"
-            ? `${guestName} requested ${technicianName(technicianId)}`
-            : kind === "Walk-In"
-              ? `${guestName} — walk-in`
-              : `${guestName} — salon assigned`,
-      },
-    ]);
-    return id;
+  ): void {
+    const guestKey = `${block.appointmentId}:${block.guestId}`;
+    setTurnEvents((current) => {
+      const cleaned = current.filter((event) => event.guestKey !== guestKey);
+      if (technicianId === "any") return cleaned;
+      const { value, kind } = turnValueFor(technicianId, block.requestedTechnicianId, block.source);
+      return [
+        ...cleaned,
+        {
+          id: `turn-${technicianId}-${guestKey}`,
+          technicianId,
+          atMinutes,
+          kind,
+          value,
+          serviceValue: block.serviceValue,
+          guestKey,
+          guestName: block.guestName,
+          serviceLabel: block.serviceLabel,
+          label:
+            kind === "Requested"
+              ? `${block.guestName} — requested technician`
+              : kind === "Walk-In"
+                ? `${block.guestName} — walk-in`
+                : `${block.guestName} — salon assigned`,
+        },
+      ];
+    });
   }
 
-  function handleMove(request: MoveRequest) {
+  /** Drop every fairness event tied to one guest (cancel / restore flows). */
+  function clearGuestEvents(appointmentId: string, guestId: string) {
+    setTurnEvents((current) =>
+      current.filter((event) => event.guestKey !== `${appointmentId}:${guestId}`),
+    );
+  }
+
+  /** Applies a move and offers Undo restoring BOTH schedule and ledger. */
+  function applyMove(request: MoveRequest) {
     const { block, technicianId, start } = request;
-    const previous: GuestPatch = {
-      technicianId: block.technicianId,
-      startMinutes: block.technicianId === "any" ? undefined : block.start,
-    };
-    // Dropping back to Waiting clears the placement so the card returns to its
-    // original anchor time.
+    const previousAppointments = appointments;
+    const previousEvents = turnEvents;
+
     updateGuest(
       block.appointmentId,
       block.guestId,
@@ -177,13 +190,8 @@ function TodayBoard() {
         ? { technicianId: "any", startMinutes: undefined }
         : { technicianId, startMinutes: start },
     );
-    const turnId = recordTurn(
-      technicianId,
-      block.guestName,
-      block.requestedTechnicianId,
-      block.source,
-      start,
-    );
+    recordAssignment(block, technicianId, start);
+
     toast.success(
       technicianId === "any"
         ? `${block.guestName} moved back to Waiting / Unassigned (${formatMinutes(block.anchor)})`
@@ -194,21 +202,53 @@ function TodayBoard() {
           ? {
               description:
                 block.requestedTechnicianId === technicianId
-                  ? `Requested technician · +0.5 turn`
-                  : `Salon assigned · +1.0 turn`,
+                  ? `Requested technician · +0.5 turn · ${formatServiceMoney(block.serviceValue)} service`
+                  : `Salon assigned · +1.0 turn · ${formatServiceMoney(block.serviceValue)} service`,
             }
-          : {}),
+          : { description: "Turn and service credit released" }),
         action: {
           label: "Undo",
           onClick: () => {
-            updateGuest(block.appointmentId, block.guestId, previous);
-            if (turnId) setTurnEvents((current) => current.filter((event) => event.id !== turnId));
+            setAppointments(previousAppointments);
+            setTurnEvents(previousEvents);
             toast.info(`${block.guestName} move undone`);
           },
         },
       },
     );
   }
+
+  /** Reassigning or unassigning an already-placed guest always asks first. */
+  function handleMove(request: MoveRequest) {
+    if (request.kind === "reassign" || request.kind === "unassign") {
+      setPendingMove(request);
+      return;
+    }
+    applyMove(request);
+  }
+
+  function adjustBlockout(blockout: TechnicianBlockout, start: number, end: number) {
+    const conflict = findConflict(
+      buildBlocks(appointments),
+      blockout.technicianId,
+      start,
+      end - start,
+      "",
+    );
+    if (conflict) {
+      toast.error(
+        `Can't cover ${conflict.guestName} at ${formatMinutes(conflict.start)} with block time. Move that appointment first.`,
+      );
+      return;
+    }
+    setBlockouts((current) =>
+      current.map((item) => (item.id === blockout.id ? { ...item, start, end } : item)),
+    );
+    toast.success(
+      `${blockout.label} · ${formatMinutes(start)}–${formatMinutes(end)} for ${technicianName(blockout.technicianId)}`,
+    );
+  }
+
 
   const registerScrollToNow = useCallback((scrollToNow: (() => void) | null) => {
     scrollToNowRef.current = scrollToNow;
