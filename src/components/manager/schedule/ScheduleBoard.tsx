@@ -483,10 +483,21 @@ export function ScheduleBoard({
                       technicianName={technician.name}
                       position={positions[technician.id] ?? technicians.length}
                       total={totals[technician.id] ?? 0}
+                      serviceTotal={revenues[technician.id] ?? 0}
                       events={turnEvents}
                       checkIns={checkIns}
                     />
                   </div>
+                  {/* Fairness at a glance: turn strip + turns · service total */}
+                  <p className="mt-1 flex items-center gap-1.5 text-[10px] font-extrabold text-muted-foreground">
+                    <TurnStrip total={totals[technician.id] ?? 0} />
+                    <span className="truncate">
+                      {formatTurns(totals[technician.id] ?? 0)}
+                      <span className="mx-1 opacity-50">·</span>
+                      {formatServiceMoney(revenues[technician.id] ?? 0)} Service
+                    </span>
+                  </p>
+
                   <p className="mt-0.5 flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
                     <span
                       className={cn(
