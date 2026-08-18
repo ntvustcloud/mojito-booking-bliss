@@ -112,7 +112,9 @@ export function buildBlocks(appointments: Appointment[]): ScheduleBlock[] {
         // Unassigned cards always sit on their original logical time.
         start: assigned ? (guest.startMinutes ?? appointment.minutes) : appointment.minutes,
         duration: guestDuration(guest),
+        serviceValue: guestServiceValue(guest),
         bookingType: bookingType(appointment),
+
         source: appointment.source,
       } satisfies ScheduleBlock;
     }),
