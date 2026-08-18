@@ -15,12 +15,26 @@ import { ColorGuide } from "@/components/manager/schedule/ColorGuide";
 
 import { ScheduleBoard, type MoveRequest } from "@/components/manager/schedule/ScheduleBoard";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   buildBlocks,
+  findConflict,
   formatMinutes,
   isWaitingNow,
   snapToSlot,
+  type ScheduleBlock,
 } from "@/data/schedule";
 import {
+  formatServiceMoney,
+  guestServiceValue,
   initialTurnEvents,
   technicianBlockouts as seedBlockouts,
   technicianCheckIns,
@@ -63,6 +77,7 @@ function TodayBoard() {
   const [bookingSeed, setBookingSeed] = useState<QuickBookingSeed | null>(null);
   const [blockOpen, setBlockOpen] = useState(false);
   const [blockSeed, setBlockSeed] = useState<BlockTimeSeed | null>(null);
+  const [pendingMove, setPendingMove] = useState<MoveRequest | null>(null);
   const [dayOffset, setDayOffset] = useState(0);
   const scrollToNowRef = useRef<(() => void) | null>(null);
   const [canScrollToNow, setCanScrollToNow] = useState(false);
@@ -285,13 +300,32 @@ function TodayBoard() {
       },
     ]);
     if (assigned) {
-      recordTurn(
-        draft.technicianId,
+      const serviceValue = guestServiceValue({
+        id: `${id}-g`,
         name,
+        serviceIds: draft.serviceIds,
+        technicianId: draft.technicianId,
+        status: "Scheduled",
+      });
+      const { value, kind } = turnValueFor(
+        draft.technicianId,
         undefined,
         draft.type === "Walk-In" ? "Walk-In" : "Phone",
-        minutes,
       );
+      setTurnEvents((current) => [
+        ...current,
+        {
+          id: `turn-${draft.technicianId}-${id}-g`,
+          technicianId: draft.technicianId,
+          atMinutes: minutes,
+          kind,
+          value,
+          serviceValue,
+          guestKey: `${id}:${id}-g`,
+          guestName: name,
+          label: kind === "Walk-In" ? `${name} — walk-in` : `${name} — salon assigned`,
+        },
+      ]);
     }
     toast.success(
       assigned
@@ -419,6 +453,7 @@ function TodayBoard() {
             setBookingSeed({ technicianId, start });
             setBookingOpen(true);
           }}
+          onAdjustBlockTime={adjustBlockout}
           onEditBlockTime={(blockout) => {
             setBlockSeed({ blockout });
             setBlockOpen(true);
@@ -432,9 +467,11 @@ function TodayBoard() {
         onOpenChange={(open) => {
           if (!open) setOpenId(null);
         }}
-        onCancelGuest={(appointmentId, guestId) =>
-          updateGuest(appointmentId, guestId, { status: "Cancelled" })
-        }
+        onCancelGuest={(appointmentId, guestId) => {
+          updateGuest(appointmentId, guestId, { status: "Cancelled" });
+          // Cancelling releases the technician's turn and service credit.
+          clearGuestEvents(appointmentId, guestId);
+        }}
         onRestoreGuest={(appointmentId, guestId) =>
           updateGuest(appointmentId, guestId, { status: "Scheduled" })
         }
@@ -454,6 +491,37 @@ function TodayBoard() {
         nowMinutes={nowMinutes}
         onSubmit={handleBooking}
       />
+
+      {/* Reassignment safety: moving a placed guest always asks first. */}
+      <AlertDialog open={Boolean(pendingMove)} onOpenChange={(open) => !open && setPendingMove(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingMove?.kind === "unassign"
+                ? "Move back to Waiting / Unassigned?"
+                : "Reassign this customer?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingMove &&
+                (pendingMove.kind === "unassign"
+                  ? `${pendingMove.block.guestName} leaves ${technicianName(pendingMove.block.technicianId)} and returns to ${formatMinutes(pendingMove.block.anchor)} in the queue. That turn and ${formatServiceMoney(pendingMove.block.serviceValue)} of service credit are released.`
+                  : `${pendingMove.block.guestName} moves from ${technicianName(pendingMove.block.technicianId)} to ${technicianName(pendingMove.technicianId)} at ${formatMinutes(pendingMove.start)}. The turn and ${formatServiceMoney(pendingMove.block.serviceValue)} of service credit move with the customer.`)}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-lg">Keep as is</AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-lg"
+              onClick={() => {
+                if (pendingMove) applyMove(pendingMove);
+                setPendingMove(null);
+              }}
+            >
+              {pendingMove?.kind === "unassign" ? "Move to Waiting" : "Reassign"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <BlockTimeDialog
         open={blockOpen}
