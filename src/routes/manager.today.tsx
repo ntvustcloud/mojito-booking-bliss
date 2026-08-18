@@ -27,6 +27,7 @@ import {
   technicianName,
   todayAppointments,
   type Appointment,
+  type BookingGuest,
   type TechnicianBlockout,
 } from "@/data/manager-mock";
 import { technicianRows } from "@/data/technician-state";
@@ -106,20 +107,26 @@ function TodayBoard() {
 
   const active = appointments.find((appointment) => appointment.id === openId) ?? null;
 
-  function updateGuest(
-    appointmentId: string,
-    guestId: string,
-    patch: Partial<Appointment["guests"][number]>,
-  ) {
+  /** `startMinutes: undefined` clears a placement (card returns to its anchor). */
+  type GuestPatch = Omit<Partial<BookingGuest>, "startMinutes"> & {
+    startMinutes?: number | undefined;
+  };
+
+  function updateGuest(appointmentId: string, guestId: string, patch: GuestPatch) {
     setAppointments((current) =>
       current.map((appointment) =>
         appointment.id !== appointmentId
           ? appointment
           : {
               ...appointment,
-              guests: appointment.guests.map((guest) =>
-                guest.id === guestId ? { ...guest, ...patch } : guest,
-              ),
+              guests: appointment.guests.map((guest) => {
+                if (guest.id !== guestId) return guest;
+                const next: BookingGuest = { ...guest, ...patch } as BookingGuest;
+                if ("startMinutes" in patch && patch.startMinutes === undefined) {
+                  delete next.startMinutes;
+                }
+                return next;
+              }),
             },
       ),
     );
@@ -157,9 +164,9 @@ function TodayBoard() {
 
   function handleMove(request: MoveRequest) {
     const { block, technicianId, start } = request;
-    const previous = {
+    const previous: GuestPatch = {
       technicianId: block.technicianId,
-      startMinutes: block.start,
+      startMinutes: block.technicianId === "any" ? undefined : block.start,
     };
     // Dropping back to Waiting clears the placement so the card returns to its
     // original anchor time.
