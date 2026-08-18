@@ -202,9 +202,9 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
 
     const techBlockouts = blockouts.filter((item) => item.technicianId === technician.id);
 
-    if (technician.state === "Break") {
+    if (technician.state === "Break" || technician.state === "Off") {
       const current = techBlockouts.find(
-        (item) => item.kind === "Break" && now >= item.start && now < item.end,
+        (item) => now >= item.start && now < item.end,
       );
       const back = current?.end ?? techBlockouts.find((item) => item.start >= now)?.end;
       return {
@@ -230,7 +230,7 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
     const conflict = findConflict(blocks, technician.id, start, duration, ignoreKey);
     if (conflict) {
       const free = nextFreeMinute(blocks, technician.id, Math.max(now, start));
-      const busyNow = conflict.status === "In Service";
+      const busyNow = conflict.start <= now && conflict.start + conflict.duration > now;
       return {
         ...base,
         quality: "ineligible" as const,
