@@ -689,6 +689,8 @@ export function ScheduleBoard({
               return (
                 <div
                   key={technician.id}
+                  data-tech-column={technician.id}
+
                   className={cn(
                     "relative border-r border-border transition-colors last:border-r-0",
                     qualityTint(technician.id),
