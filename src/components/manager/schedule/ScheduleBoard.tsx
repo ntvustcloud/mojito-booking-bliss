@@ -712,36 +712,16 @@ export function ScheduleBoard({
                     />
                   ))}
 
-                  {/* Break / off-shift blocks — not bookable */}
+                  {/* Block time — resizable, movable, click to edit. Never bookable. */}
                   {techBlockouts.map((blockout) => (
-                    <div
+                    <BlockTimeStripe
                       key={blockout.id}
-                      role="button"
-                      tabIndex={0}
-                      title={`${blockout.label} — click to edit or delete`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onEditBlockTime(blockout);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter" && event.key !== " ") return;
-                        event.preventDefault();
-                        onEditBlockTime(blockout);
-                      }}
-                      className="absolute inset-x-1 z-[5] flex cursor-pointer items-center justify-center overflow-hidden rounded-md border border-dashed border-border bg-muted/80 bg-[repeating-linear-gradient(135deg,transparent,transparent_6px,rgb(0_0_0/0.04)_6px,rgb(0_0_0/0.04)_12px)] transition-colors hover:bg-muted"
-                      style={{
-                        top: minutesToOffset(blockout.start),
-                        height: (blockout.end - blockout.start) * PIXELS_PER_MINUTE - 3,
-                      }}
-                    >
-                      <span className="px-1 text-center text-[10px] font-extrabold tracking-[0.1em] uppercase text-muted-foreground">
-                        {blockout.label}
-                        <span className="block text-[9px] tracking-normal normal-case opacity-80">
-                          {formatShortMinutes(blockout.start)}–{formatShortMinutes(blockout.end)}
-                        </span>
-                      </span>
-                    </div>
+                      blockout={blockout}
+                      onEdit={() => onEditBlockTime(blockout)}
+                      onAdjust={(start, end) => onAdjustBlockTime(blockout, start, end)}
+                    />
                   ))}
+
 
                   {hover?.technicianId === technician.id && (
                     <div
