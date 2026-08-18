@@ -124,7 +124,7 @@ function BlockCard({
   onOpen: () => void;
   onDragStart: (event: React.DragEvent) => void;
 }) {
-  const visual = stateVisual(block, now);
+  const visual = stateVisual(block);
   const StateIcon = visual.icon;
   const isWalkIn = block.source === "Walk-In";
   const inQueue = waitedFor !== undefined;
@@ -214,6 +214,7 @@ export function ScheduleBoard({
   onOpenAppointment,
   onMove,
   onCreateAt,
+  onEditBlockTime,
   registerScrollToNow,
 }: {
   appointments: Appointment[];
@@ -225,23 +226,26 @@ export function ScheduleBoard({
   onOpenAppointment: (appointmentId: string) => void;
   onMove: (request: MoveRequest) => void;
   onCreateAt: (technicianId: string, start: number) => void;
+  onEditBlockTime: (blockout: TechnicianBlockout) => void;
   registerScrollToNow?: (scrollToNow: (() => void) | null) => void;
 }) {
   const blocks = useMemo(() => buildBlocks(appointments), [appointments]);
   const waitingNow = useMemo(
     () =>
       blocks
-        .filter(isWaitingNow)
+        .filter((block) => isWaitingNow(block, nowMinutes))
         .sort(
           (a, b) =>
-            queuePriority(a, nowMinutes) - queuePriority(b, nowMinutes) ||
-            (a.waitingSince ?? a.start) - (b.waitingSince ?? b.start),
+            queuePriority(a, nowMinutes) - queuePriority(b, nowMinutes) || a.anchor - b.anchor,
         ),
     [blocks, nowMinutes],
   );
   const upcoming = useMemo(
-    () => blocks.filter(isUpcomingUnassigned).sort((a, b) => a.start - b.start),
-    [blocks],
+    () =>
+      blocks
+        .filter((block) => isUpcomingUnassigned(block, nowMinutes))
+        .sort((a, b) => a.start - b.start),
+    [blocks, nowMinutes],
   );
   // Side-by-side lanes for unassigned cards that share a time range.
   const upcomingLanes = useMemo(
@@ -277,7 +281,7 @@ export function ScheduleBoard({
         blockouts,
         checkIns,
         events: turnEvents,
-        start: isWaitingNow(block)
+        start: isWaitingNow(block, nowMinutes)
           ? snapToSlot(Math.max(nowMinutes ?? block.start, block.start))
           : block.start,
         duration: block.duration,
@@ -679,7 +683,19 @@ export function ScheduleBoard({
                   {techBlockouts.map((blockout) => (
                     <div
                       key={blockout.id}
-                      className="pointer-events-none absolute inset-x-1 z-[5] flex items-center justify-center overflow-hidden rounded-md border border-dashed border-border bg-muted/80 bg-[repeating-linear-gradient(135deg,transparent,transparent_6px,rgb(0_0_0/0.04)_6px,rgb(0_0_0/0.04)_12px)]"
+                      role="button"
+                      tabIndex={0}
+                      title={`${blockout.label} — click to edit or delete`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onEditBlockTime(blockout);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        onEditBlockTime(blockout);
+                      }}
+                      className="absolute inset-x-1 z-[5] flex cursor-pointer items-center justify-center overflow-hidden rounded-md border border-dashed border-border bg-muted/80 bg-[repeating-linear-gradient(135deg,transparent,transparent_6px,rgb(0_0_0/0.04)_6px,rgb(0_0_0/0.04)_12px)] transition-colors hover:bg-muted"
                       style={{
                         top: minutesToOffset(blockout.start),
                         height: (blockout.end - blockout.start) * PIXELS_PER_MINUTE - 3,
@@ -762,9 +778,9 @@ export function ScheduleBoard({
       </div>
       <p className="flex items-center gap-1.5 border-t border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
         <Clock className="size-3.5" aria-hidden />
-        Drag a card to another technician or time to reassign — snaps to {SLOT_MINUTES} minutes.
-        Breaks and off-shift blocks can&apos;t take appointments. Turn numbers and ★ suggestions
-        are recommendations — you always decide.
+        Click an empty slot to add a booking, drag a card to reassign it (snaps to {SLOT_MINUTES}{" "}
+        minutes), and click a block-time stripe to edit it. Turn numbers and ★ suggestions are
+        recommendations — you always decide.
       </p>
     </section>
   );

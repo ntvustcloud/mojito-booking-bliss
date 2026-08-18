@@ -202,7 +202,7 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
 
     const techBlockouts = blockouts.filter((item) => item.technicianId === technician.id);
 
-    if (technician.state === "Break" || technician.state === "Off") {
+    if (technician.state === "Break") {
       const current = techBlockouts.find(
         (item) => now >= item.start && now < item.end,
       );
