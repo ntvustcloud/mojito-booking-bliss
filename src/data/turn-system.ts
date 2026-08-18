@@ -311,6 +311,7 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
       ...base,
       quality: gap - duration < 30 ? ("limited" as const) : ("eligible" as const),
       detail: gap - duration < 30 ? `${detail} · tight fit` : detail,
+      ...(wall === Infinity ? {} : { nextBooking: wall }),
       priorityPreserved: false,
     };
   });
@@ -318,22 +319,38 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
   const eligible = candidates
     .filter((candidate) => candidate.quality !== "ineligible")
     .sort((a, b) => {
+      // 1. Turn fairness is primary…
+      if (turnBucket(a.total) !== turnBucket(b.total)) return a.total - b.total;
+      // 2. …Service Total balances technicians on the same turn level…
+      if (a.serviceTotal !== b.serviceTotal) return a.serviceTotal - b.serviceTotal;
       if (a.total !== b.total) return a.total - b.total;
       const checkA = checkInMinute(checkIns, a.technicianId) ?? Infinity;
       const checkB = checkInMinute(checkIns, b.technicianId) ?? Infinity;
       if (checkA !== checkB) return checkA - checkB;
-      // Final tie-breaker: whoever has been idle longest.
+      // 3. Final tie-breaker: whoever has been idle longest.
       return (
         lastFinishedBefore(blocks, a.technicianId, now) -
         lastFinishedBefore(blocks, b.technicianId, now)
       );
     });
 
-  // Prefer a fully-eligible technician over a tight fit for the star pick.
-  const best = eligible.find((candidate) => candidate.quality === "eligible") ?? eligible[0];
+  // A specifically requested technician wins whenever they are eligible.
+  const requested = input.requestedTechnicianId
+    ? eligible.find((candidate) => candidate.technicianId === input.requestedTechnicianId)
+    : undefined;
+  // Otherwise prefer a fully-eligible technician over a tight fit.
+  const best =
+    requested ?? eligible.find((candidate) => candidate.quality === "eligible") ?? eligible[0];
   if (best) {
     best.recommended = true;
     best.quality = "best";
+    const runnerUp = eligible.find((candidate) => candidate !== best);
+    best.reason = requested
+      ? "Customer requested this technician"
+      : runnerUp && turnBucket(runnerUp.total) === turnBucket(best.total) &&
+          runnerUp.serviceTotal > best.serviceTotal
+        ? `Same turn count as ${runnerUp.name}, lower service total today`
+        : `Fewest turns today (${best.total.toFixed(1)}) and open time now`;
   }
 
   const skipped = candidates
@@ -342,6 +359,7 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
 
   return [...eligible, ...skipped];
 }
+
 
 /** Turn value the technician earns for accepting this customer. */
 export function turnValueFor(
