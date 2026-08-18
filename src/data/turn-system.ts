@@ -28,6 +28,11 @@ import type { TechnicianBlockout, TechnicianRow } from "@/data/manager-mock";
 
 export type TurnEventKind = "Check In" | "Walk-In" | "Salon Assigned" | "Requested";
 
+/**
+ * One fairness event. Turn value AND service value are both attached to the
+ * assignment that produced them, so reassign / cancel / undo just drop the
+ * event — totals can never drift or double-count.
+ */
 export type TurnEvent = {
   id: string;
   technicianId: string;
@@ -36,6 +41,12 @@ export type TurnEvent = {
   kind: TurnEventKind;
   /** Turn value added by this event (0 for check-in). */
   value: number;
+  /** Service revenue assigned by this event, in dollars (0 for check-in). */
+  serviceValue: number;
+  /** `appointmentId:guestId` of the assignment this event belongs to. */
+  guestKey?: string;
+  guestName?: string;
+  serviceLabel?: string;
   /** Short human line for the turn history list. */
   label: string;
 };
@@ -57,6 +68,24 @@ export function turnTotals(events: TurnEvent[]): Record<string, number> {
   return totals;
 }
 
+/** "Service Total Today" per technician — service prices only, never income. */
+export function serviceTotals(events: TurnEvent[]): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const event of events) {
+    totals[event.technicianId] =
+      (totals[event.technicianId] ?? 0) + (event.serviceValue || 0);
+  }
+  return totals;
+}
+
+/**
+ * Turn buckets group "reasonably similar" turn priority. Inside one bucket the
+ * Service Total becomes the tie-breaker; across buckets turn fairness wins.
+ */
+export function turnBucket(total: number): number {
+  return Math.floor(total + 1e-9);
+}
+
 export function checkInMinute(checkIns: TechnicianCheckIn[], technicianId: string): number | null {
   return checkIns.find((item) => item.technicianId === technicianId)?.atMinutes ?? null;
 }
@@ -66,6 +95,7 @@ export function turnHistory(events: TurnEvent[], technicianId: string): TurnEven
     .filter((event) => event.technicianId === technicianId)
     .sort((a, b) => a.atMinutes - b.atMinutes);
 }
+
 
 /**
  * Fairness order for the whole day: lowest turn total first, then the earliest
