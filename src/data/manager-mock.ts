@@ -1,4 +1,5 @@
 import { getService, type Service } from "@/data/services";
+import { servicesMinutes } from "@/data/service-durations";
 import { technicians } from "@/data/salon";
 import type { TechnicianCheckIn, TurnEvent } from "@/data/turn-system";
 
@@ -7,57 +8,47 @@ import type { TechnicianCheckIn, TurnEvent } from "@/data/turn-system";
  *
  * Services and technicians come from the SAME shared sources the customer site
  * uses (`@/data/services`, `@/data/salon`). Only the operational layer
- * (today's appointments, technician shift state) is mocked here and is designed
- * to be swapped for real data later without touching the components.
+ * (today's bookings, technician block time) is mocked here.
+ *
+ * Operating principle: the board infers activity from the schedule. There is no
+ * manual service lifecycle — a booking is either live or cancelled.
  */
 
-export type AppointmentStatus =
-  | "Scheduled"
-  | "Checked In"
-  | "Waiting"
-  | "Assigned"
-  | "In Service"
-  | "Completed"
-  | "Cancelled"
-  | "No Show";
+export type AppointmentStatus = "Scheduled" | "Cancelled";
 
-export const APPOINTMENT_STATUSES: AppointmentStatus[] = [
-  "Scheduled",
-  "Checked In",
-  "Waiting",
-  "Assigned",
-  "In Service",
-  "Completed",
-  "Cancelled",
-  "No Show",
-];
+/** Appointment = booked ahead. Walk-In = arrived without a booking. */
+export type BookingType = "Appointment" | "Walk-In";
 
 /** One person inside a booking. An individual booking has exactly one guest. */
 export type BookingGuest = {
   id: string;
   name: string;
   serviceIds: string[];
-  /** Technician id from `technicians`, or "any" when unassigned. */
+  /** Technician id from `technicians`, or "any" when still unassigned. */
   technicianId: string;
   /**
-   * Set only when the customer specifically requested this technician when
-   * booking. A requested appointment is worth half a turn.
+   * Set only when the customer specifically requested this technician.
+   * A requested booking is worth half a turn.
    */
   requestedTechnicianId?: string;
   status: AppointmentStatus;
-
-  startedAt?: string;
-  /** Optional per-guest start (minutes from midnight) when rescheduled on the board. */
+  /**
+   * Placement on a technician's timeline once assigned. Unassigned guests
+   * always fall back to the booking's anchor time (see `Appointment.minutes`),
+   * which is how a card returns to its original slot when dragged back to
+   * Waiting / Unassigned.
+   */
   startMinutes?: number;
-  /** When the guest physically started waiting (minutes from midnight). */
-  waitingSinceMinutes?: number;
 };
 
 export type Appointment = {
   id: string;
-  /** Display label, e.g. "9:00 AM". */
+  /** Display label of the anchor time, e.g. "9:00 AM". */
   time: string;
-  /** Sortable minutes-from-midnight for the day. */
+  /**
+   * Anchor time in minutes from midnight: the scheduled time for an
+   * appointment, the check-in time for a walk-in. Never overwritten by drag.
+   */
   minutes: number;
   /** Booking title — customer name, or party name for groups. */
   title: string;
@@ -70,10 +61,8 @@ export type Appointment = {
 
 export type TechnicianState = "Available" | "In Service" | "Break" | "Off";
 
-export type TechnicianShift = {
-  technicianId: string;
-  state: TechnicianState;
-};
+export const bookingType = (appointment: Appointment): BookingType =>
+  appointment.source === "Walk-In" ? "Walk-In" : "Appointment";
 
 export const isGroup = (appointment: Appointment) => appointment.guests.length > 1;
 
@@ -88,9 +77,14 @@ export function guestServiceLabel(guest: BookingGuest): string {
   return names.length > 0 ? names.join(" + ") : "No services yet";
 }
 
+/** Scheduled minutes for a guest — driven by the configurable duration map. */
+export function guestScheduledMinutes(guest: BookingGuest): number {
+  return servicesMinutes(guest.serviceIds);
+}
+
 export function technicianName(id: string): string {
-  if (id === "any") return "Any";
-  return technicians.find((technician) => technician.id === id)?.name ?? "Any";
+  if (id === "any") return "Any Available";
+  return technicians.find((technician) => technician.id === id)?.name ?? "Any Available";
 }
 
 export function appointmentServiceLabel(appointment: Appointment): string {
@@ -99,11 +93,8 @@ export function appointmentServiceLabel(appointment: Appointment): string {
 }
 
 export function appointmentTechnicianLabel(appointment: Appointment): string {
-  if (isGroup(appointment)) {
-    const unique = new Set(appointment.guests.map((guest) => guest.technicianId));
-    if (unique.size > 1) return "Multiple Techs";
-    return technicianName(appointment.guests[0]!.technicianId);
-  }
+  const unique = new Set(appointment.guests.map((guest) => guest.technicianId));
+  if (unique.size > 1) return "Multiple Techs";
   return technicianName(appointment.guests[0]!.technicianId);
 }
 
@@ -115,17 +106,13 @@ export function appointmentTotal(appointment: Appointment): number {
 }
 
 export function appointmentDuration(appointment: Appointment): number {
-  return Math.max(
-    0,
-    ...appointment.guests.map((guest) =>
-      guestServices(guest).reduce((inner, s) => inner + s.duration, 0),
-    ),
-  );
+  return Math.max(0, ...appointment.guests.map(guestScheduledMinutes));
 }
 
-/** Rough status roll-up used for the list row badge on individual bookings. */
 export function appointmentStatus(appointment: Appointment): AppointmentStatus {
-  return appointment.guests[0]!.status;
+  return appointment.guests.every((guest) => guest.status === "Cancelled")
+    ? "Cancelled"
+    : "Scheduled";
 }
 
 export const todayAppointments: Appointment[] = [
@@ -145,8 +132,7 @@ export const todayAppointments: Appointment[] = [
         serviceIds: ["signature-pedicure"],
         technicianId: "mai",
         requestedTechnicianId: "mai",
-        status: "In Service",
-        startedAt: "2:04 PM",
+        status: "Scheduled",
       },
     ],
   },
@@ -164,8 +150,7 @@ export const todayAppointments: Appointment[] = [
         name: "Jessica Alvarez",
         serviceIds: ["gel-manicure"],
         technicianId: "any",
-        status: "Waiting",
-        waitingSinceMinutes: 570,
+        status: "Scheduled",
       },
     ],
   },
@@ -204,15 +189,14 @@ export const todayAppointments: Appointment[] = [
         serviceIds: ["signature-pedicure", "gel-manicure"],
         technicianId: "mai",
         requestedTechnicianId: "mai",
-        status: "In Service",
-        startedAt: "2:04 PM",
+        status: "Scheduled",
       },
       {
         id: "g-4b",
         name: "Jessica",
         serviceIds: ["deluxe-pedicure"],
         technicianId: "linh",
-        status: "Waiting",
+        status: "Scheduled",
       },
       {
         id: "g-4c",
@@ -237,8 +221,7 @@ export const todayAppointments: Appointment[] = [
         name: "Priya Raman",
         serviceIds: ["gel-x-full-set", "nail-art-simple"],
         technicianId: "any",
-        status: "Checked In",
-        waitingSinceMinutes: 675,
+        status: "Scheduled",
       },
     ],
   },
@@ -257,7 +240,7 @@ export const todayAppointments: Appointment[] = [
         serviceIds: ["classic-manicure"],
         technicianId: "rosa",
         requestedTechnicianId: "rosa",
-        status: "Completed",
+        status: "Scheduled",
       },
     ],
   },
@@ -276,7 +259,7 @@ export const todayAppointments: Appointment[] = [
         serviceIds: ["dip-powder"],
         technicianId: "linh",
         requestedTechnicianId: "linh",
-        status: "Assigned",
+        status: "Scheduled",
       },
     ],
   },
@@ -367,7 +350,7 @@ export const todayAppointments: Appointment[] = [
         name: "Nina Patel",
         serviceIds: ["acrylic-fill"],
         technicianId: "any",
-        status: "No Show",
+        status: "Scheduled",
       },
     ],
   },
@@ -376,16 +359,15 @@ export const todayAppointments: Appointment[] = [
 /** Working technicians (excludes the customer-facing "any" pseudo option). */
 export const workingTechnicians = technicians.filter((technician) => technician.id !== "any");
 
-export const technicianShifts: TechnicianShift[] = [
-  { technicianId: "mai", state: "In Service" },
-  { technicianId: "linh", state: "In Service" },
-  { technicianId: "tran", state: "Available" },
-  { technicianId: "rosa", state: "Break" },
-];
+/* ---------------- Block Time ---------------- */
 
-export type BlockoutKind = "Break" | "Off" | "Unavailable";
+export const BLOCKOUT_KINDS = ["Break", "Lunch", "Personal", "Unavailable", "Other"] as const;
+export type BlockoutKind = (typeof BLOCKOUT_KINDS)[number];
 
-/** Non-bookable stretches of a technician's day, rendered as blocks on the board. */
+/**
+ * Non-bookable stretches of a technician's day — the single source of truth for
+ * "this technician is not available". Breaks are just one kind of block time.
+ */
 export type TechnicianBlockout = {
   id: string;
   technicianId: string;
@@ -394,17 +376,32 @@ export type TechnicianBlockout = {
   /** Minutes from midnight. */
   start: number;
   end: number;
+  note?: string;
 };
 
+/** Kinds that read as "temporarily away" rather than "not working". */
+export const isBreakKind = (kind: BlockoutKind) =>
+  kind === "Break" || kind === "Lunch" || kind === "Personal";
+
 export const technicianBlockouts: TechnicianBlockout[] = [
-  { id: "bo-mai-lunch", technicianId: "mai", kind: "Break", label: "Break", start: 750, end: 780 },
+  { id: "bo-mai-lunch", technicianId: "mai", kind: "Lunch", label: "Lunch", start: 750, end: 780 },
   { id: "bo-linh-lunch", technicianId: "linh", kind: "Break", label: "Break", start: 810, end: 840 },
-  { id: "bo-rosa-lunch", technicianId: "rosa", kind: "Break", label: "Break", start: 720, end: 780 },
-  { id: "bo-tran-off", technicianId: "tran", kind: "Off", label: "Off shift", start: 1020, end: 1200 },
+  { id: "bo-rosa-lunch", technicianId: "rosa", kind: "Lunch", label: "Lunch", start: 720, end: 780 },
+  {
+    id: "bo-tran-off",
+    technicianId: "tran",
+    kind: "Unavailable",
+    label: "Off shift",
+    start: 1020,
+    end: 1200,
+  },
 ];
 
-export function blockoutsFor(technicianId: string): TechnicianBlockout[] {
-  return technicianBlockouts
+export function blockoutsFor(
+  blockouts: TechnicianBlockout[],
+  technicianId: string,
+): TechnicianBlockout[] {
+  return blockouts
     .filter((blockout) => blockout.technicianId === technicianId)
     .sort((a, b) => a.start - b.start);
 }
@@ -415,42 +412,9 @@ export type TechnicianRow = {
   initials: string;
   state: TechnicianState;
   detail?: string;
-  startedAt?: string;
+  /** Minute the technician becomes free again, when currently busy or blocked. */
+  freeAt?: number;
 };
-
-/** Live technician state derived from today's appointments + shift state. */
-export function technicianRows(
-  appointments: Appointment[],
-  shifts: TechnicianShift[],
-): TechnicianRow[] {
-  return workingTechnicians.map((technician) => {
-    const shift = shifts.find((item) => item.technicianId === technician.id);
-    let state: TechnicianState = shift?.state === "In Service" ? "Available" : (shift?.state ?? "Available");
-    let detail: string | undefined;
-    let startedAt: string | undefined;
-
-    for (const appointment of appointments) {
-      const guest = appointment.guests.find(
-        (item) => item.technicianId === technician.id && item.status === "In Service",
-      );
-      if (guest) {
-        state = "In Service";
-        detail = `${guest.name} — ${guestServiceLabel(guest)}`;
-        startedAt = guest.startedAt;
-        break;
-      }
-    }
-
-    return {
-      id: technician.id,
-      name: technician.name,
-      initials: technician.initials,
-      state,
-      ...(detail ? { detail } : {}),
-      ...(startedAt ? { startedAt } : {}),
-    };
-  });
-}
 
 /**
  * Mock daily check-in clock. The Turn System uses check-in order as the
