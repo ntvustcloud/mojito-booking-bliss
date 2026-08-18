@@ -450,7 +450,11 @@ export const technicianCheckIns: TechnicianCheckIn[] = [
   { technicianId: "rosa", atMinutes: 540 }, // 9:00 AM
 ];
 
-/** Turn ledger for the day so far (check-ins + accepted customers). */
+/**
+ * Turn / Service ledger for the day so far (check-ins + accepted customers).
+ * Every fairness value is an EVENT, so reassigning, cancelling or undoing an
+ * assignment simply removes that event instead of patching a running total.
+ */
 export const initialTurnEvents: TurnEvent[] = [
   ...technicianCheckIns.map((checkIn) => ({
     id: `chk-${checkIn.technicianId}`,
@@ -458,6 +462,7 @@ export const initialTurnEvents: TurnEvent[] = [
     atMinutes: checkIn.atMinutes,
     kind: "Check In" as const,
     value: 0,
+    serviceValue: 0,
     label: "Checked in",
   })),
   {
@@ -466,7 +471,11 @@ export const initialTurnEvents: TurnEvent[] = [
     atMinutes: 545,
     kind: "Requested",
     value: 0.5,
-    label: "Sarah requested Mai",
+    serviceValue: 55,
+    guestKey: "apt-1:g-1",
+    guestName: "Sarah Nguyen",
+    serviceLabel: "Signature Pedicure",
+    label: "Sarah Nguyen — requested technician",
   },
   {
     id: "turn-linh-1",
@@ -474,7 +483,35 @@ export const initialTurnEvents: TurnEvent[] = [
     atMinutes: 630,
     kind: "Salon Assigned",
     value: 1,
+    serviceValue: 70,
+    guestKey: "apt-4:g-4b",
+    guestName: "Jessica",
+    serviceLabel: "Deluxe Pedicure",
     label: "Jessica (group) — salon assigned",
+  },
+  {
+    id: "turn-mai-2",
+    technicianId: "mai",
+    atMinutes: 630,
+    kind: "Requested",
+    value: 0.5,
+    serviceValue: 97,
+    guestKey: "apt-4:g-4a",
+    guestName: "Sarah",
+    serviceLabel: "Signature Pedicure + Gel Manicure",
+    label: "Sarah (group) — requested technician",
+  },
+  {
+    id: "turn-tran-1",
+    technicianId: "tran",
+    atMinutes: 630,
+    kind: "Salon Assigned",
+    value: 1,
+    serviceValue: 75,
+    guestKey: "apt-4:g-4c",
+    guestName: "Guest 3",
+    serviceLabel: "Acrylic Full Set",
+    label: "Guest 3 (group) — salon assigned",
   },
   {
     id: "turn-rosa-1",
@@ -482,6 +519,11 @@ export const initialTurnEvents: TurnEvent[] = [
     atMinutes: 720,
     kind: "Requested",
     value: 0.5,
-    label: "Daniel requested Rosa",
+    serviceValue: 30,
+    guestKey: "apt-6:g-6",
+    guestName: "Daniel Kim",
+    serviceLabel: "Classic Manicure",
+    label: "Daniel Kim — requested technician",
   },
 ];
+
