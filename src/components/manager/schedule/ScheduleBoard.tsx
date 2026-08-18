@@ -189,13 +189,12 @@ function BlockCard({
       <span className="flex items-center gap-1">
         <span className="min-w-0 flex-1 truncate text-xs font-extrabold">{block.guestName}</span>
         {block.requestedTechnicianId === block.technicianId && (
-          <span
-            title={`Customer specifically requested ${technicianName(block.technicianId)} · \u00bd turn`}
-            className="shrink-0 rounded bg-background/60 px-1 text-[9px] font-extrabold tracking-wide uppercase"
-          >
-            Req
-          </span>
+          <Heart
+            className="size-3 shrink-0 fill-current opacity-70"
+            aria-label={`Customer specifically requested ${technicianName(block.technicianId)} · ½ turn`}
+          />
         )}
+
       </span>
       {!compact && (
         <span className="truncate text-[11px] leading-tight opacity-85">{block.serviceLabel}</span>
