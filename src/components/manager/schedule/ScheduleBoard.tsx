@@ -56,11 +56,16 @@ import {
   type TechnicianRow,
 } from "@/data/manager-mock";
 
+/** What kind of change a drop represents — the route decides what to confirm. */
+export type MoveKind = "assign" | "reassign" | "unassign" | "retime";
+
 export type MoveRequest = {
   block: ScheduleBlock;
   technicianId: string;
   start: number;
+  kind: MoveKind;
 };
+
 
 const GROUP_ACCENTS = [
   "before:bg-primary",
