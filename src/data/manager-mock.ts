@@ -82,6 +82,29 @@ export function guestScheduledMinutes(guest: BookingGuest): number {
   return servicesMinutes(guest.serviceIds);
 }
 
+/**
+ * Service revenue for one guest = sum of the service prices only.
+ * No tips, tax, gift cards, discounts, commission or payroll — this is the
+ * "Service Total Today" fairness figure, not technician take-home pay.
+ */
+export function guestServiceValue(guest: BookingGuest): number {
+  return guestServices(guest).reduce((sum, service) => sum + service.price, 0);
+}
+
+/** Compact money label for the board, e.g. "$185". */
+export function formatServiceMoney(amount: number): string {
+  return `$${Math.round(amount)}`;
+}
+
+/** "2½ Turns" style label — compact enough for a technician header. */
+export function formatTurns(total: number): string {
+  const whole = Math.floor(total + 1e-9);
+  const half = total - whole >= 0.5 - 1e-9;
+  const text = half ? (whole === 0 ? "½" : `${whole}½`) : String(whole);
+  return `${text} ${total === 1 ? "Turn" : "Turns"}`;
+}
+
+
 export function technicianName(id: string): string {
   if (id === "any") return "Any Available";
   return technicians.find((technician) => technician.id === id)?.name ?? "Any Available";
