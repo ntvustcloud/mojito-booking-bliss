@@ -39,8 +39,11 @@ const GHOST_KEY = "__drag-preview__";
 const QUEUE_STAGGER = 6;
 import { TurnPriorityBadge } from "@/components/manager/schedule/TurnPriorityBadge";
 import { TurnSuggestion } from "@/components/manager/schedule/TurnSuggestion";
+import { TurnStrip } from "@/components/manager/schedule/TurnStrip";
+import { BlockTimeStripe } from "@/components/manager/schedule/BlockTimeStripe";
 import {
   evaluateCandidates,
+  serviceTotals,
   turnOrder,
   turnPositions,
   turnTotals,
@@ -50,11 +53,14 @@ import {
   type TurnQuality,
 } from "@/data/turn-system";
 import {
+  formatServiceMoney,
+  formatTurns,
   technicianName,
   type Appointment,
   type TechnicianBlockout,
   type TechnicianRow,
 } from "@/data/manager-mock";
+
 
 /** What kind of change a drop represents — the route decides what to confirm. */
 export type MoveKind = "assign" | "reassign" | "unassign" | "retime";
