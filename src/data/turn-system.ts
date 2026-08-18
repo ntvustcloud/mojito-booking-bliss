@@ -195,7 +195,8 @@ export type TurnInput = {
 export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
   const { technicians, blocks, blockouts, checkIns, events, start, duration, serviceLabel } = input;
   const totals = turnTotals(events);
-  const positions = turnPositions(turnOrder(technicians, checkIns, totals));
+  const revenues = serviceTotals(events);
+  const positions = turnPositions(turnOrder(technicians, checkIns, totals, revenues));
   const now = input.now ?? start;
   const ignoreKey = input.ignoreKey ?? "";
 
@@ -208,9 +209,11 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
       initials: technician.initials,
       position,
       total,
+      serviceTotal: revenues[technician.id] ?? 0,
       recommended: false,
       state: technician.state === "Available" ? "Available now" : technician.state,
     };
+
 
     if (checkInMinute(checkIns, technician.id) === null) {
       return {
