@@ -273,10 +273,12 @@ export function ScheduleBoard({
 
   // ---- Turn Recommendation System (decision support only) ----
   const totals = useMemo(() => turnTotals(turnEvents), [turnEvents]);
+  const revenues = useMemo(() => serviceTotals(turnEvents), [turnEvents]);
   const positions = useMemo(
-    () => turnPositions(turnOrder(technicians, checkIns, totals)),
-    [technicians, checkIns, totals],
+    () => turnPositions(turnOrder(technicians, checkIns, totals, revenues)),
+    [technicians, checkIns, totals, revenues],
   );
+
 
   const candidatesFor = useCallback(
     (block: ScheduleBlock): TurnCandidate[] =>
