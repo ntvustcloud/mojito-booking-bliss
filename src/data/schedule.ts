@@ -82,9 +82,12 @@ export type ScheduleBlock = {
   anchor: number;
   start: number;
   duration: number;
+  /** Service price total for this guest — feeds the fairness Service Total. */
+  serviceValue: number;
   bookingType: BookingType;
   source: Appointment["source"];
 };
+
 
 export function buildBlocks(appointments: Appointment[]): ScheduleBlock[] {
   return appointments.flatMap((appointment) =>
