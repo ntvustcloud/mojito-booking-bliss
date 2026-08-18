@@ -1,36 +1,36 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, Crosshair, Plus, UserPlus } from "lucide-react";
+import { CalendarOff, ChevronLeft, ChevronRight, Crosshair, Plus } from "lucide-react";
 import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { NeedsAttention } from "@/components/manager/NeedsAttention";
 import { AppointmentDrawer } from "@/components/manager/AppointmentDrawer";
-import { WalkInDialog, type WalkInDraft } from "@/components/manager/WalkInDialog";
+import {
+  QuickBookingDialog,
+  type QuickBookingDraft,
+  type QuickBookingSeed,
+} from "@/components/manager/QuickBookingDialog";
+import { BlockTimeDialog, type BlockTimeSeed } from "@/components/manager/BlockTimeDialog";
 import { ColorGuide } from "@/components/manager/schedule/ColorGuide";
 
+import { ScheduleBoard, type MoveRequest } from "@/components/manager/schedule/ScheduleBoard";
 import {
-  ScheduleBoard,
-  type MoveRequest,
-} from "@/components/manager/schedule/ScheduleBoard";
-import { formatMinutes, snapToSlot } from "@/data/schedule";
+  buildBlocks,
+  formatMinutes,
+  isWaitingNow,
+  snapToSlot,
+} from "@/data/schedule";
 import {
   initialTurnEvents,
-  technicianBlockouts,
+  technicianBlockouts as seedBlockouts,
   technicianCheckIns,
   technicianName,
-  technicianRows,
-  technicianShifts,
   todayAppointments,
   type Appointment,
+  type BookingGuest,
+  type TechnicianBlockout,
 } from "@/data/manager-mock";
+import { technicianRows } from "@/data/technician-state";
 import { turnValueFor, type TurnEvent } from "@/data/turn-system";
 
 export const Route = createFileRoute("/manager/today")({
@@ -44,7 +44,10 @@ export const Route = createFileRoute("/manager/today")({
       },
       { name: "robots", content: "noindex" },
       { property: "og:title", content: "Today — Mojito Manager Portal" },
-      { property: "og:description", content: "Live technician schedule board for Mojito Nail Salon." },
+      {
+        property: "og:description",
+        content: "Live technician schedule board for Mojito Nail Salon.",
+      },
     ],
   }),
   component: TodayBoard,
@@ -53,11 +56,13 @@ export const Route = createFileRoute("/manager/today")({
 function TodayBoard() {
   // Mock local state — replace with shared salon data later.
   const [appointments, setAppointments] = useState<Appointment[]>(todayAppointments);
+  const [blockouts, setBlockouts] = useState<TechnicianBlockout[]>(seedBlockouts);
   const [turnEvents, setTurnEvents] = useState<TurnEvent[]>(initialTurnEvents);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [walkInOpen, setWalkInOpen] = useState(false);
-  const [appointmentOpen, setAppointmentOpen] = useState(false);
-  const [newSlot, setNewSlot] = useState<{ technicianId: string; start: number } | null>(null);
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [bookingSeed, setBookingSeed] = useState<QuickBookingSeed | null>(null);
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [blockSeed, setBlockSeed] = useState<BlockTimeSeed | null>(null);
   const [dayOffset, setDayOffset] = useState(0);
   const scrollToNowRef = useRef<(() => void) | null>(null);
   const [canScrollToNow, setCanScrollToNow] = useState(false);
@@ -83,34 +88,45 @@ function TodayBoard() {
     );
   }, [dayOffset]);
 
-  const rows = useMemo(() => technicianRows(appointments, technicianShifts), [appointments]);
+  const boardNow = dayOffset === 0 ? nowMinutes : null;
+  const rows = useMemo(
+    () => technicianRows(appointments, blockouts, boardNow),
+    [appointments, blockouts, boardNow],
+  );
 
+  /** Everything on the top bar is inferred from the schedule + the clock. */
   const stats = useMemo(() => {
-    const guests = appointments.flatMap((appointment) => appointment.guests);
+    const blocks = buildBlocks(appointments);
     return {
       total: appointments.length,
-      waiting: guests.filter((guest) => ["Waiting", "Checked In"].includes(guest.status)).length,
-      inService: guests.filter((guest) => guest.status === "In Service").length,
+      waiting: blocks.filter((block) => isWaitingNow(block, boardNow)).length,
+      inService: rows.filter((row) => row.state === "In Service").length,
       availableTechs: rows.filter((row) => row.state === "Available").length,
     };
-  }, [appointments, rows]);
+  }, [appointments, rows, boardNow]);
 
   const active = appointments.find((appointment) => appointment.id === openId) ?? null;
 
-  function updateGuest(
-    appointmentId: string,
-    guestId: string,
-    patch: Partial<Appointment["guests"][number]>,
-  ) {
+  /** `startMinutes: undefined` clears a placement (card returns to its anchor). */
+  type GuestPatch = Omit<Partial<BookingGuest>, "startMinutes"> & {
+    startMinutes?: number | undefined;
+  };
+
+  function updateGuest(appointmentId: string, guestId: string, patch: GuestPatch) {
     setAppointments((current) =>
       current.map((appointment) =>
         appointment.id !== appointmentId
           ? appointment
           : {
               ...appointment,
-              guests: appointment.guests.map((guest) =>
-                guest.id === guestId ? { ...guest, ...patch } : guest,
-              ),
+              guests: appointment.guests.map((guest) => {
+                if (guest.id !== guestId) return guest;
+                const next: BookingGuest = { ...guest, ...patch } as BookingGuest;
+                if ("startMinutes" in patch && patch.startMinutes === undefined) {
+                  delete next.startMinutes;
+                }
+                return next;
+              }),
             },
       ),
     );
@@ -148,19 +164,19 @@ function TodayBoard() {
 
   function handleMove(request: MoveRequest) {
     const { block, technicianId, start } = request;
-    const previous = {
+    const previous: GuestPatch = {
       technicianId: block.technicianId,
-      startMinutes: block.start,
-      status: block.status,
+      startMinutes: block.technicianId === "any" ? undefined : block.start,
     };
-    updateGuest(block.appointmentId, block.guestId, {
-      technicianId,
-      startMinutes: start,
-      ...(technicianId !== "any" && block.status === "Waiting"
-        ? { status: "Assigned" as const }
-        : {}),
-      ...(technicianId === "any" ? { status: "Waiting" as const } : {}),
-    });
+    // Dropping back to Waiting clears the placement so the card returns to its
+    // original anchor time.
+    updateGuest(
+      block.appointmentId,
+      block.guestId,
+      technicianId === "any"
+        ? { technicianId: "any", startMinutes: undefined }
+        : { technicianId, startMinutes: start },
+    );
     const turnId = recordTurn(
       technicianId,
       block.guestName,
@@ -170,7 +186,7 @@ function TodayBoard() {
     );
     toast.success(
       technicianId === "any"
-        ? `${block.guestName} moved back to waiting`
+        ? `${block.guestName} moved back to Waiting / Unassigned (${formatMinutes(block.anchor)})`
         : `${block.guestName} assigned to ${technicianName(technicianId)} at ${formatMinutes(start)}`,
       {
         duration: 6000,
@@ -199,11 +215,12 @@ function TodayBoard() {
     setCanScrollToNow(Boolean(scrollToNow));
   }, []);
 
-  function handleWalkIn(draft: WalkInDraft) {
-    const now = new Date();
-    const id = `walkin-${now.getTime()}`;
-    const minutes = snapToSlot(now.getHours() * 60 + now.getMinutes());
-    const name = draft.name.trim() || "Walk-In Guest";
+  /** One creation path for walk-ins and appointments. */
+  function handleBooking(draft: QuickBookingDraft) {
+    const id = `bk-${Date.now()}`;
+    const minutes = snapToSlot(draft.startMinutes);
+    const name = draft.name.trim() || (draft.type === "Walk-In" ? "Walk-In Guest" : "New Booking");
+    const assigned = draft.technicianId !== "any";
     setAppointments((current) => [
       ...current,
       {
@@ -213,26 +230,45 @@ function TodayBoard() {
         title: name,
         primaryContact: name,
         phone: draft.phone.trim() || "—",
-        source: "Walk-In",
+        ...(draft.note.trim() ? { notes: draft.note.trim() } : {}),
+        source: draft.type === "Walk-In" ? "Walk-In" : "Phone",
         guests: [
           {
             id: `${id}-g`,
             name,
             serviceIds: draft.serviceIds,
             technicianId: draft.technicianId,
-            status: draft.technicianId === "any" ? "Waiting" : "Assigned",
-            startMinutes: minutes,
+            status: "Scheduled",
+            ...(assigned ? { startMinutes: minutes } : {}),
           },
         ],
       },
     ]);
-    if (draft.technicianId !== "any") {
-      recordTurn(draft.technicianId, name, undefined, "Walk-In", minutes);
+    if (assigned) {
+      recordTurn(
+        draft.technicianId,
+        name,
+        undefined,
+        draft.type === "Walk-In" ? "Walk-In" : "Phone",
+        minutes,
+      );
     }
     toast.success(
-      draft.technicianId === "any"
-        ? `${name} added to waiting`
-        : `${name} assigned to ${technicianName(draft.technicianId)} · +1.0 turn`,
+      assigned
+        ? `${name} added with ${technicianName(draft.technicianId)} at ${formatMinutes(minutes)}`
+        : `${name} added to Waiting / Unassigned (${formatMinutes(minutes)})`,
+    );
+  }
+
+  function saveBlockout(blockout: TechnicianBlockout) {
+    setBlockouts((current) => {
+      const exists = current.some((item) => item.id === blockout.id);
+      return exists
+        ? current.map((item) => (item.id === blockout.id ? blockout : item))
+        : [...current, blockout];
+    });
+    toast.success(
+      `${blockout.label} for ${technicianName(blockout.technicianId)} · ${formatMinutes(blockout.start)}–${formatMinutes(blockout.end)}`,
     );
   }
 
@@ -285,7 +321,7 @@ function TodayBoard() {
             )}
           </div>
           <p className="mt-1 text-xs font-bold text-foreground sm:text-sm">
-            {stats.total} Appointments
+            {stats.total} Bookings
             <span className="mx-1.5 text-muted-foreground/60">·</span>
             {stats.waiting} Waiting
             <span className="mx-1.5 text-muted-foreground/60">·</span>
@@ -296,42 +332,56 @@ function TodayBoard() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ColorGuide />
-
-          <Button variant="outline" className="h-9 rounded-lg" onClick={() => setWalkInOpen(true)}>
-            <UserPlus className="size-4" aria-hidden />
-            Walk-In
+          <Button
+            variant="outline"
+            className="h-9 rounded-lg"
+            onClick={() => {
+              setBlockSeed({ start: snapToSlot(nowMinutes ?? 9 * 60) });
+              setBlockOpen(true);
+            }}
+          >
+            <CalendarOff className="size-4" aria-hidden />
+            Block Time
           </Button>
           <Button
             className="h-9 rounded-lg"
             onClick={() => {
-              setNewSlot(null);
-              setAppointmentOpen(true);
+              setBookingSeed(null);
+              setBookingOpen(true);
             }}
           >
             <Plus className="size-4" aria-hidden />
-            Appointment
+            Add
           </Button>
         </div>
       </header>
 
       <div className="mt-3">
-        <NeedsAttention appointments={appointments} onOpen={(id) => setOpenId(id)} />
+        <NeedsAttention
+          appointments={appointments}
+          nowMinutes={boardNow}
+          onOpen={(id) => setOpenId(id)}
+        />
       </div>
 
       <div className="mt-3">
         <ScheduleBoard
           appointments={appointments}
           technicians={rows}
-          blockouts={technicianBlockouts}
+          blockouts={blockouts}
           turnEvents={turnEvents}
           checkIns={technicianCheckIns}
           registerScrollToNow={registerScrollToNow}
-          nowMinutes={dayOffset === 0 ? nowMinutes : null}
+          nowMinutes={boardNow}
           onOpenAppointment={(id) => setOpenId(id)}
           onMove={handleMove}
           onCreateAt={(technicianId, start) => {
-            setNewSlot({ technicianId, start });
-            setAppointmentOpen(true);
+            setBookingSeed({ technicianId, start });
+            setBookingOpen(true);
+          }}
+          onEditBlockTime={(blockout) => {
+            setBlockSeed({ blockout });
+            setBlockOpen(true);
           }}
         />
       </div>
@@ -339,57 +389,42 @@ function TodayBoard() {
       <AppointmentDrawer
         appointment={active}
         open={Boolean(active)}
-        onOpenChange={(open) => !open && setOpenId(null)}
-        onGuestStatus={(appointmentId, guestId, status) =>
-          updateGuest(appointmentId, guestId, {
-            status,
-            ...(status === "In Service"
-              ? {
-                  startedAt: new Date().toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  }),
-                }
-              : {}),
-          })
+        onOpenChange={(open) => {
+          if (!open) setOpenId(null);
+        }}
+        onCancelGuest={(appointmentId, guestId) =>
+          updateGuest(appointmentId, guestId, { status: "Cancelled" })
+        }
+        onRestoreGuest={(appointmentId, guestId) =>
+          updateGuest(appointmentId, guestId, { status: "Scheduled" })
         }
         onGuestTechnician={(appointmentId, guestId, technicianId) =>
-          updateGuest(appointmentId, guestId, { technicianId })
+          updateGuest(
+            appointmentId,
+            guestId,
+            technicianId === "any" ? { technicianId, startMinutes: undefined } : { technicianId },
+          )
         }
       />
 
-      <WalkInDialog open={walkInOpen} onOpenChange={setWalkInOpen} onSubmit={handleWalkIn} />
+      <QuickBookingDialog
+        open={bookingOpen}
+        onOpenChange={setBookingOpen}
+        seed={bookingSeed}
+        nowMinutes={nowMinutes}
+        onSubmit={handleBooking}
+      />
 
-      <Dialog open={appointmentOpen} onOpenChange={setAppointmentOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>New appointment</DialogTitle>
-            <DialogDescription>
-              {newSlot
-                ? `Pre-filled for ${technicianName(newSlot.technicianId)} at ${formatMinutes(newSlot.start)}. Full booking (customer, services, guests) comes next — walk-ins can be added right now.`
-                : "Full appointment booking (customer, date, time, guests) comes next. Walk-ins can be added right now."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              className="rounded-lg"
-              onClick={() => setAppointmentOpen(false)}
-            >
-              Close
-            </Button>
-            <Button
-              className="rounded-lg"
-              onClick={() => {
-                setAppointmentOpen(false);
-                setWalkInOpen(true);
-              }}
-            >
-              Add a walk-in instead
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <BlockTimeDialog
+        open={blockOpen}
+        onOpenChange={setBlockOpen}
+        seed={blockSeed}
+        onSave={saveBlockout}
+        onDelete={(id) => {
+          setBlockouts((current) => current.filter((item) => item.id !== id));
+          toast.success("Block time removed");
+        }}
+      />
     </div>
   );
 }

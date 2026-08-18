@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { AlertTriangle, ChevronDown, Clock, UserPlus, Users } from "lucide-react";
+import { AlertTriangle, ChevronDown, Clock, Footprints, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isGroup, type Appointment } from "@/data/manager-mock";
+import { bookingType, isGroup, type Appointment } from "@/data/manager-mock";
 
 type Alert = {
   id: string;
@@ -11,61 +11,68 @@ type Alert = {
   appointmentId?: string;
 };
 
-/** Derived, not stored — real data can replace `appointments` with no changes here. */
-function buildAlerts(appointments: Appointment[]): Alert[] {
-  const alerts: Alert[] = [];
+const isLive = (appointment: Appointment) =>
+  appointment.guests.some((guest) => guest.status !== "Cancelled");
 
-  const unassigned = appointments.filter(
+/** Derived from the schedule + clock — nothing here needs a manual status. */
+function buildAlerts(appointments: Appointment[], now: number | null): Alert[] {
+  const alerts: Alert[] = [];
+  const live = appointments.filter(isLive);
+
+  const waitingWalkIns = live.filter(
     (appointment) =>
-      !["Completed", "Cancelled", "No Show"].includes(appointment.guests[0]!.status) &&
-      appointment.guests.some((guest) => guest.technicianId === "any"),
+      bookingType(appointment) === "Walk-In" &&
+      appointment.guests.some((guest) => guest.technicianId === "any") &&
+      (now === null || appointment.minutes <= now),
+  );
+  if (waitingWalkIns.length > 0) {
+    alerts.push({
+      id: "walkins",
+      icon: Footprints,
+      short: `${waitingWalkIns.length} walk-in waiting`,
+      text: `${waitingWalkIns.length} walk-in${waitingWalkIns.length > 1 ? "s" : ""} waiting for a technician`,
+      appointmentId: waitingWalkIns[0]!.id,
+    });
+  }
+
+  const dueAppointments = live.filter(
+    (appointment) =>
+      bookingType(appointment) === "Appointment" &&
+      appointment.guests.some((guest) => guest.technicianId === "any") &&
+      now !== null &&
+      appointment.minutes <= now + 15,
+  );
+  if (dueAppointments.length > 0) {
+    alerts.push({
+      id: "due",
+      icon: Clock,
+      short: `${dueAppointments.length} appointment due`,
+      text: `${dueAppointments.length} appointment${dueAppointments.length > 1 ? "s" : ""} due now and still unassigned`,
+      appointmentId: dueAppointments[0]!.id,
+    });
+  }
+
+  const unassigned = live.filter((appointment) =>
+    appointment.guests.some((guest) => guest.technicianId === "any"),
   );
   if (unassigned.length > 0) {
     alerts.push({
       id: "unassigned",
       icon: UserPlus,
       short: `${unassigned.length} unassigned`,
-      text: `${unassigned.length} appointment${unassigned.length > 1 ? "s" : ""} need technician assignment`,
+      text: `${unassigned.length} booking${unassigned.length > 1 ? "s" : ""} still need a technician`,
       appointmentId: unassigned[0]!.id,
     });
   }
 
-  const groups = appointments.filter(
-    (appointment) =>
-      isGroup(appointment) &&
-      appointment.guests.some((guest) => ["Scheduled", "Checked In"].includes(guest.status)),
-  );
+  const groups = live.filter(isGroup);
   if (groups.length > 0) {
     alerts.push({
       id: "group",
-      icon: Users,
-      short: `${groups.length} group arriving soon`,
-      text: `${groups.length} group appointment${groups.length > 1 ? "s" : ""} arriving soon`,
-      appointmentId: groups[0]!.id,
-    });
-  }
-
-  const next = appointments.find((appointment) => appointment.guests[0]!.status === "Scheduled");
-  if (next) {
-    alerts.push({
-      id: "starting",
-      icon: Clock,
-      short: `${next.title} starting soon`,
-      text: `${next.title} starts in 10 minutes`,
-      appointmentId: next.id,
-    });
-  }
-
-  const waiting = appointments.filter((appointment) =>
-    appointment.guests.some((guest) => guest.status === "Waiting"),
-  );
-  if (waiting.length > 0) {
-    alerts.push({
-      id: "waiting",
       icon: AlertTriangle,
-      short: `${waiting.length} waiting`,
-      text: `${waiting.length} guest${waiting.length > 1 ? "s" : ""} waiting to be started`,
-      appointmentId: waiting[0]!.id,
+      short: `${groups.length} group booking`,
+      text: `${groups.length} group booking${groups.length > 1 ? "s" : ""} today — seat them together if you can`,
+      appointmentId: groups[0]!.id,
     });
   }
 
@@ -75,13 +82,15 @@ function buildAlerts(appointments: Appointment[]): Alert[] {
 /** Compact collapsible bar so the schedule keeps the screen. */
 export function NeedsAttention({
   appointments,
+  nowMinutes,
   onOpen,
 }: {
   appointments: Appointment[];
+  nowMinutes: number | null;
   onOpen: (appointmentId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const alerts = buildAlerts(appointments);
+  const alerts = buildAlerts(appointments, nowMinutes);
 
   if (alerts.length === 0) {
     return (

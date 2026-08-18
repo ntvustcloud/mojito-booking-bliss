@@ -1,9 +1,11 @@
 import {
-  guestServices,
+  bookingType,
+  guestScheduledMinutes,
   guestServiceLabel,
   type Appointment,
   type AppointmentStatus,
   type BookingGuest,
+  type BookingType,
   type TechnicianBlockout,
 } from "@/data/manager-mock";
 
@@ -21,7 +23,8 @@ export const PIXELS_PER_MINUTE = 1.6;
 export const SLOT_HEIGHT = SLOT_MINUTES * PIXELS_PER_MINUTE;
 export const MIN_CARD_MINUTES = 20;
 
-export const TERMINAL_STATUSES: AppointmentStatus[] = ["Completed", "Cancelled", "No Show"];
+export const TERMINAL_STATUSES: AppointmentStatus[] = ["Cancelled"];
+
 
 export function slotCount(): number {
   return (DAY_END_MINUTES - DAY_START_MINUTES) / SLOT_MINUTES;
@@ -54,8 +57,7 @@ export function offsetToMinutes(offset: number): number {
 }
 
 export function guestDuration(guest: BookingGuest): number {
-  const total = guestServices(guest).reduce((sum, service) => sum + service.duration, 0);
-  return Math.max(MIN_CARD_MINUTES, total || 30);
+  return Math.max(MIN_CARD_MINUTES, guestScheduledMinutes(guest) || 30);
 }
 
 /** One person's slot in the day — the atomic unit the board renders and moves. */
@@ -72,9 +74,15 @@ export type ScheduleBlock = {
   /** Set when the customer specifically requested this technician (½ turn). */
   requestedTechnicianId?: string;
   status: AppointmentStatus;
-  waitingSince?: number;
+  /**
+   * Original logical time: scheduled time for an appointment, check-in time for
+   * a walk-in. Never changed by drag-and-drop, so a card dropped back into
+   * Waiting / Unassigned returns to exactly this position.
+   */
+  anchor: number;
   start: number;
   duration: number;
+  bookingType: BookingType;
   source: Appointment["source"];
 };
 
@@ -82,6 +90,7 @@ export function buildBlocks(appointments: Appointment[]): ScheduleBlock[] {
   return appointments.flatMap((appointment) =>
     appointment.guests.map((guest) => {
       const group = appointment.guests.length > 1;
+      const assigned = guest.technicianId !== "any";
       return {
         key: `${appointment.id}:${guest.id}`,
         appointmentId: appointment.id,
@@ -96,11 +105,11 @@ export function buildBlocks(appointments: Appointment[]): ScheduleBlock[] {
           ? { requestedTechnicianId: guest.requestedTechnicianId }
           : {}),
         status: guest.status,
-        ...(guest.waitingSinceMinutes !== undefined
-          ? { waitingSince: guest.waitingSinceMinutes }
-          : {}),
-        start: guest.startMinutes ?? appointment.minutes,
+        anchor: appointment.minutes,
+        // Unassigned cards always sit on their original logical time.
+        start: assigned ? (guest.startMinutes ?? appointment.minutes) : appointment.minutes,
         duration: guestDuration(guest),
+        bookingType: bookingType(appointment),
         source: appointment.source,
       } satisfies ScheduleBlock;
     }),
@@ -113,22 +122,23 @@ export const isActiveBlock = (block: ScheduleBlock) => !TERMINAL_STATUSES.includ
 export const isQueued = (block: ScheduleBlock) =>
   block.technicianId === "any" && isActiveBlock(block);
 
-/** Guests physically in the salon without a chair — a live queue. */
-const PRESENT_STATUSES: AppointmentStatus[] = ["Waiting", "Checked In"];
-
-export const isWaitingNow = (block: ScheduleBlock) =>
-  isQueued(block) && PRESENT_STATUSES.includes(block.status);
+/**
+ * Waiting now = unassigned and already due (walk-in checked in, or appointment
+ * time reached). Inferred from the clock — no manual check-in step.
+ */
+export const isWaitingNow = (block: ScheduleBlock, now: number | null) =>
+  isQueued(block) && now !== null && block.anchor <= now;
 
 /** Future bookings that still need a technician — stay on their timeline slot. */
-export const isUpcomingUnassigned = (block: ScheduleBlock) =>
-  isQueued(block) && !PRESENT_STATUSES.includes(block.status);
+export const isUpcomingUnassigned = (block: ScheduleBlock, now: number | null) =>
+  isQueued(block) && (now === null || block.anchor > now);
 
-/** Minutes a present guest has been waiting, or null when unknown. */
+/** Minutes a queued guest has been waiting, or null when not due yet. */
 export function waitingMinutes(block: ScheduleBlock, now: number | null): number | null {
-  const since = block.waitingSince ?? block.start;
-  if (now === null || since > now) return null;
-  return Math.round(now - since);
+  if (now === null || block.anchor > now) return null;
+  return Math.round(now - block.anchor);
 }
+
 
 /** First blockout (break / off shift) overlapping the proposed placement. */
 export function findBlockout(

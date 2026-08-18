@@ -1,18 +1,18 @@
-import {
-  technicianRows,
-  type Appointment,
-  type TechnicianShift,
-} from "@/data/manager-mock";
+import { technicianRows } from "@/data/technician-state";
+import { formatShortMinutes } from "@/data/schedule";
+import type { Appointment, TechnicianBlockout } from "@/data/manager-mock";
 import { TechStateBadge } from "@/components/manager/StatusBadge";
 
 export function TechnicianBoard({
   appointments,
-  shifts,
+  blockouts,
+  nowMinutes,
 }: {
   appointments: Appointment[];
-  shifts: TechnicianShift[];
+  blockouts: TechnicianBlockout[];
+  nowMinutes: number | null;
 }) {
-  const rows = technicianRows(appointments, shifts);
+  const rows = technicianRows(appointments, blockouts, nowMinutes);
   const available = rows.filter((row) => row.state === "Available").length;
 
   return (
@@ -37,8 +37,10 @@ export function TechnicianBoard({
               {row.detail && (
                 <p className="truncate text-xs text-muted-foreground">{row.detail}</p>
               )}
-              {row.startedAt && (
-                <p className="text-xs text-muted-foreground/80">Started {row.startedAt}</p>
+              {row.freeAt !== undefined && (
+                <p className="text-xs text-muted-foreground/80">
+                  Free at {formatShortMinutes(row.freeAt)}
+                </p>
               )}
             </div>
           </li>

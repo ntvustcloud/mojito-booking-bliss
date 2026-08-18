@@ -10,9 +10,9 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import {
+  APPOINTMENT_PRIORITY_WINDOW,
   BLOCKOUT_VISUALS,
   BOARD_STATES,
-  EARLY_ARRIVAL_WINDOW,
   RECOMMENDATION_VISUALS,
   type BoardState,
 } from "@/components/manager/schedule/scheduleTone";
@@ -23,17 +23,7 @@ import {
  * shrinks the schedule grid.
  */
 
-const STATUS_ORDER: BoardState[] = [
-  "scheduled",
-  "early",
-  "appointment-ready",
-  "walkin-waiting",
-  "assigned",
-  "in-service",
-  "completed",
-  "cancelled",
-  "no-show",
-];
+const STATUS_ORDER: BoardState[] = ["appointment", "walkin", "cancelled"];
 
 function Row({
   label,
@@ -90,13 +80,13 @@ export function ColorGuide() {
         <SheetHeader className="text-left">
           <SheetTitle>Schedule Color Guide</SheetTitle>
           <SheetDescription>
-            Colour always means status or recommendation — never decoration. Every state also has an
-            icon and a label.
+            Two card colours, one block-time pattern. Everything else — busy, free, waiting — is read
+            straight from the schedule and the clock.
           </SheetDescription>
         </SheetHeader>
 
         <div className="mt-5 space-y-4 pb-6">
-          <Section title="Customer / appointment status" note="Shown on the guest card surface.">
+          <Section title="Customer cards" note="Booking type decides the colour.">
             {STATUS_ORDER.map((key) => {
               const visual = BOARD_STATES[key];
               return (
@@ -111,7 +101,7 @@ export function ColorGuide() {
             })}
           </Section>
 
-          <Section title="Technician availability blocks" note="Drops are rejected on these times.">
+          <Section title="Block Time" note="Drops are rejected on these times.">
             {BLOCKOUT_VISUALS.map((visual) => (
               <Row
                 key={visual.key}
@@ -140,8 +130,8 @@ export function ColorGuide() {
 
           <Section title="How turns work">
             <li className="text-[11px] font-semibold text-muted-foreground">
-              <span className="font-extrabold text-foreground">+1.0 turn</span> — walk-in, or the
-              salon picks the technician.
+              <span className="font-extrabold text-foreground">+1.0 turn</span> — walk-in, or an
+              &quot;Any Available&quot; booking the salon assigns.
             </li>
             <li className="text-[11px] font-semibold text-muted-foreground">
               <span className="font-extrabold text-foreground">+0.5 turn</span> — the customer
@@ -154,11 +144,22 @@ export function ColorGuide() {
               column header).
             </li>
             <li className="text-[11px] font-semibold text-muted-foreground">
-              Appointment guests checked in within {EARLY_ARRIVAL_WINDOW} minutes of their time take
-              priority over walk-ins in the waiting queue.
+              Waiting order: appointments due within {APPOINTMENT_PRIORITY_WINDOW} minutes come
+              before plain walk-ins; walk-ins follow their check-in time.
             </li>
             <li className="text-[11px] font-semibold text-muted-foreground">
               Turns never change automatically — only when you assign a guest to a technician.
+            </li>
+          </Section>
+
+          <Section title="How the board reads availability">
+            <li className="text-[11px] font-semibold text-muted-foreground">
+              A card in a technician column reserves that time — no &quot;start&quot; or
+              &quot;complete&quot; taps needed.
+            </li>
+            <li className="text-[11px] font-semibold text-muted-foreground">
+              Once the card&apos;s time passes, the technician is available again unless Block Time
+              says otherwise.
             </li>
           </Section>
         </div>
