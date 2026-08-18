@@ -105,11 +105,17 @@ export function turnOrder(
   technicians: TechnicianRow[],
   checkIns: TechnicianCheckIn[],
   totals: Record<string, number>,
+  revenues: Record<string, number> = {},
 ): string[] {
   return [...technicians]
     .sort((a, b) => {
       const totalA = totals[a.id] ?? 0;
       const totalB = totals[b.id] ?? 0;
+      if (turnBucket(totalA) !== turnBucket(totalB)) return totalA - totalB;
+      // Same turn bucket → the lighter Service Total goes first.
+      const moneyA = revenues[a.id] ?? 0;
+      const moneyB = revenues[b.id] ?? 0;
+      if (moneyA !== moneyB) return moneyA - moneyB;
       if (totalA !== totalB) return totalA - totalB;
       const checkA = checkInMinute(checkIns, a.id);
       const checkB = checkInMinute(checkIns, b.id);
@@ -120,6 +126,7 @@ export function turnOrder(
     })
     .map((technician) => technician.id);
 }
+
 
 export function turnPositions(order: string[]): Record<string, number> {
   const positions: Record<string, number> = {};
