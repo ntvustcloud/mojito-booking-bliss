@@ -399,7 +399,17 @@ export function ScheduleBoard({
       }
     }
 
-    onMove({ block, technicianId, start });
+    const kind: MoveKind =
+      technicianId === "any"
+        ? "unassign"
+        : block.technicianId === "any"
+          ? "assign"
+          : block.technicianId === technicianId
+            ? "retime"
+            : "reassign";
+
+    onMove({ block, technicianId, start, kind });
+
   }
 
   function dragProps(block: ScheduleBlock) {
