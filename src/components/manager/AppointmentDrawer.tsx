@@ -1,6 +1,5 @@
-import { Phone, StickyNote } from "lucide-react";
+import { Phone, StickyNote, Undo2, X } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -8,67 +7,41 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { GroupBadge, StatusBadge } from "@/components/manager/StatusBadge";
+import { BookingTypeBadge, GroupBadge, StatusBadge } from "@/components/manager/StatusBadge";
+import { formatMinutes } from "@/data/schedule";
 import {
   appointmentDuration,
   appointmentTotal,
+  bookingType,
+  guestScheduledMinutes,
   guestServiceLabel,
   isGroup,
   technicianName,
   workingTechnicians,
   type Appointment,
-  type AppointmentStatus,
   type BookingGuest,
 } from "@/data/manager-mock";
 
-type Action = { label: string; next: AppointmentStatus; variant?: "primary" | "quiet" | "danger" };
-
-/** Only status-appropriate actions are offered. */
-function actionsFor(status: AppointmentStatus): Action[] {
-  switch (status) {
-    case "Scheduled":
-      return [
-        { label: "Check In", next: "Checked In", variant: "primary" },
-        { label: "Cancel", next: "Cancelled", variant: "danger" },
-        { label: "No Show", next: "No Show", variant: "quiet" },
-      ];
-    case "Checked In":
-      return [
-        { label: "Move to Waiting", next: "Waiting", variant: "primary" },
-        { label: "Start Service", next: "In Service", variant: "quiet" },
-        { label: "Cancel", next: "Cancelled", variant: "danger" },
-      ];
-    case "Waiting":
-    case "Assigned":
-      return [
-        { label: "Start Service", next: "In Service", variant: "primary" },
-        { label: "Cancel", next: "Cancelled", variant: "danger" },
-      ];
-    case "In Service":
-      return [{ label: "Complete", next: "Completed", variant: "primary" }];
-    default:
-      return [];
-  }
-}
-
-function actionClass(variant: Action["variant"]) {
-  if (variant === "primary") return "bg-primary text-primary-foreground hover:bg-sage-deep";
-  if (variant === "danger")
-    return "border border-border bg-status-off-bg text-status-off-fg hover:bg-status-off-bg/70";
-  return "border border-border bg-card text-foreground hover:bg-secondary";
-}
+/**
+ * Booking detail. Deliberately minimal: assign a technician, cancel, or
+ * restore. There is no service lifecycle to maintain — the schedule itself
+ * says who is busy and when.
+ */
 
 function GuestBlock({
   guest,
   showName,
-  onStatus,
+  onCancel,
+  onRestore,
   onTechnician,
 }: {
   guest: BookingGuest;
   showName: boolean;
-  onStatus: (guestId: string, status: AppointmentStatus) => void;
+  onCancel: (guestId: string) => void;
+  onRestore: (guestId: string) => void;
   onTechnician: (guestId: string, technicianId: string) => void;
 }) {
+  const cancelled = guest.status === "Cancelled";
   return (
     <div className="rounded-xl border border-border bg-card p-3">
       <div className="flex items-center justify-between gap-2">
@@ -77,37 +50,23 @@ function GuestBlock({
       </div>
       <p className="mt-1 text-sm text-foreground">{guestServiceLabel(guest)}</p>
       <p className="text-xs text-muted-foreground">
-        Technician: {technicianName(guest.technicianId)}
-        {guest.startedAt ? ` · Started ${guest.startedAt}` : ""}
+        {guestScheduledMinutes(guest)} min · Technician: {technicianName(guest.technicianId)}
+        {guest.startMinutes !== undefined && guest.technicianId !== "any"
+          ? ` · ${formatMinutes(guest.startMinutes)}`
+          : ""}
       </p>
 
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        {actionsFor(guest.status).map((action) => (
-          <button
-            key={action.label}
-            type="button"
-            onClick={() => onStatus(guest.id, action.next)}
-            className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors ${actionClass(action.variant)}`}
-          >
-            {action.label}
-          </button>
-        ))}
-        {actionsFor(guest.status).length === 0 && (
-          <span className="text-xs text-muted-foreground">No actions for this status.</span>
-        )}
-      </div>
-
       <div className="mt-3">
-        <label className="text-xs font-bold text-muted-foreground">Assign technician</label>
+        <label className="text-xs font-bold text-muted-foreground">Technician</label>
         <Select
           value={guest.technicianId}
           onValueChange={(value) => onTechnician(guest.id, value)}
         >
           <SelectTrigger className="mt-1 h-9 rounded-lg text-sm">
-            <SelectValue placeholder="Any available" />
+            <SelectValue placeholder="Any Available" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="any">Any available</SelectItem>
+            <SelectItem value="any">Any Available</SelectItem>
             {workingTechnicians.map((technician) => (
               <SelectItem key={technician.id} value={technician.id}>
                 {technician.name}
@@ -115,6 +74,28 @@ function GuestBlock({
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="mt-3">
+        {cancelled ? (
+          <button
+            type="button"
+            onClick={() => onRestore(guest.id)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-bold text-foreground transition-colors hover:bg-secondary"
+          >
+            <Undo2 className="size-3.5" aria-hidden />
+            Restore booking
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onCancel(guest.id)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-1.5 text-xs font-bold text-destructive transition-colors hover:bg-destructive/20"
+          >
+            <X className="size-3.5" aria-hidden />
+            Cancel booking
+          </button>
+        )}
       </div>
     </div>
   );
@@ -124,13 +105,15 @@ export function AppointmentDrawer({
   appointment,
   open,
   onOpenChange,
-  onGuestStatus,
+  onCancelGuest,
+  onRestoreGuest,
   onGuestTechnician,
 }: {
   appointment: Appointment | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onGuestStatus: (appointmentId: string, guestId: string, status: AppointmentStatus) => void;
+  onCancelGuest: (appointmentId: string, guestId: string) => void;
+  onRestoreGuest: (appointmentId: string, guestId: string) => void;
   onGuestTechnician: (appointmentId: string, guestId: string, technicianId: string) => void;
 }) {
   return (
@@ -139,12 +122,14 @@ export function AppointmentDrawer({
         {appointment && (
           <>
             <SheetHeader className="gap-1 border-b border-border">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <SheetTitle className="text-lg">{appointment.title}</SheetTitle>
+                <BookingTypeBadge type={bookingType(appointment)} />
                 {isGroup(appointment) && <GroupBadge count={appointment.guests.length} />}
               </div>
               <p className="text-sm text-muted-foreground">
-                Today · {appointment.time} · {appointmentDuration(appointment)} min · $
+                {bookingType(appointment) === "Walk-In" ? "Checked in" : "Booked"}{" "}
+                {appointment.time} · {appointmentDuration(appointment)} min · $
                 {appointmentTotal(appointment)} est.
               </p>
             </SheetHeader>
@@ -171,30 +156,20 @@ export function AppointmentDrawer({
 
               <div className="space-y-2">
                 <h3 className="text-xs font-extrabold tracking-[0.12em] uppercase text-muted-foreground">
-                  {isGroup(appointment) ? "Guests" : "Appointment"}
+                  {isGroup(appointment) ? "Guests" : "Booking"}
                 </h3>
                 {appointment.guests.map((guest) => (
                   <GuestBlock
                     key={guest.id}
                     guest={guest}
                     showName={isGroup(appointment)}
-                    onStatus={(guestId, status) =>
-                      onGuestStatus(appointment.id, guestId, status)
-                    }
+                    onCancel={(guestId) => onCancelGuest(appointment.id, guestId)}
+                    onRestore={(guestId) => onRestoreGuest(appointment.id, guestId)}
                     onTechnician={(guestId, technicianId) =>
                       onGuestTechnician(appointment.id, guestId, technicianId)
                     }
                   />
                 ))}
-              </div>
-
-              <div className="flex gap-2 border-t border-border pt-4">
-                <Button variant="outline" className="flex-1 rounded-lg" size="sm">
-                  Edit appointment
-                </Button>
-                <Button variant="outline" className="flex-1 rounded-lg" size="sm">
-                  Print ticket
-                </Button>
               </div>
             </div>
           </>
