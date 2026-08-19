@@ -222,6 +222,14 @@ function BlockCard({
         {block.technicianId === "any" && !isWalkIn && (
           <span className="opacity-70">· Any tech</span>
         )}
+        {block.arrivedAt !== undefined && (
+          <span
+            className="opacity-90"
+            title={`Checked in at the front tablet · ${formatShortMinutes(block.arrivedAt)}`}
+          >
+            · ● Arrived
+          </span>
+        )}
       </span>
     </button>
   );

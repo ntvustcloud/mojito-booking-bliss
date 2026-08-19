@@ -45,7 +45,7 @@ import {
   type TechnicianBlockout,
 } from "@/data/manager-mock";
 import { technicianRows } from "@/data/technician-state";
-import { arrivalTimes, useCheckIns, walkInAppointments } from "@/data/check-in-store";
+import { arrivedGuests, useCheckIns, walkInAppointments } from "@/data/check-in-store";
 import { turnValueFor, type TurnEvent } from "@/data/turn-system";
 
 export const Route = createFileRoute("/manager/today")({

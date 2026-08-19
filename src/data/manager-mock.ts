@@ -32,6 +32,8 @@ export type BookingGuest = {
    */
   requestedTechnicianId?: string;
   status: AppointmentStatus;
+  /** Minutes from midnight when this guest checked in at the front tablet. */
+  arrivedAtMinutes?: number;
   /**
    * Placement on a technician's timeline once assigned. Unassigned guests
    * always fall back to the booking's anchor time (see `Appointment.minutes`),
