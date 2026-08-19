@@ -25,6 +25,8 @@ export type CheckInRecord = {
   guestId?: string;
   /** Walk-in check-in: the services they asked for. */
   serviceIds?: string[];
+  /** Walk-in preference only — never an assignment. */
+  preferredTechnicianId?: string;
 };
 
 const STORAGE_KEY = "mojito.checkins.v1";
@@ -100,25 +102,32 @@ export function walkInAppointments(records: CheckInRecord[]): Appointment[] {
       primaryContact: record.name,
       phone: record.phone,
       source: "Walk-In" as const,
-      notes: "Self check-in at the front tablet.",
+      notes: record.preferredTechnicianId
+        ? "Self check-in at the front tablet. Prefers a specific technician."
+        : "Self check-in at the front tablet.",
       guests: [
         {
           id: `${record.id}-g`,
           name: record.name,
           serviceIds: record.serviceIds ?? [],
+          // Never auto-assigned: preference only, the manager decides.
           technicianId: "any",
+          ...(record.preferredTechnicianId
+            ? { requestedTechnicianId: record.preferredTechnicianId }
+            : {}),
           status: "Scheduled" as const,
+          arrivedAtMinutes: record.atMinutes,
         },
       ],
     }));
 }
 
-/** appointmentId → arrival time, for booked customers who checked themselves in. */
-export function arrivalTimes(records: CheckInRecord[]): Record<string, number> {
+/** `appointmentId:guestId` → arrival time, for booked guests who checked in. */
+export function arrivedGuests(records: CheckInRecord[]): Record<string, number> {
   const map: Record<string, number> = {};
   for (const record of records) {
-    if (record.kind === "Appointment" && record.appointmentId) {
-      map[record.appointmentId] = record.atMinutes;
+    if (record.kind === "Appointment" && record.appointmentId && record.guestId) {
+      map[`${record.appointmentId}:${record.guestId}`] = record.atMinutes;
     }
   }
   return map;
