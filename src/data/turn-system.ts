@@ -283,6 +283,7 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
         ...base,
         quality: "limited" as const,
         detail: `${overlap} min overlap with ${conflict.guestName} · may start slightly late`,
+        priorityPreserved: false,
       };
     }
     if (conflict) {
