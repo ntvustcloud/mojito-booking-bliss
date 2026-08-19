@@ -1,15 +1,22 @@
-import { guestServiceLabel, technicianName, type Appointment, type BookingGuest, type TechnicianBlockout } from "@/data/manager-mock";
+import {
+  guestServiceLabel,
+  technicianName,
+  type Appointment,
+  type BookingGuest,
+  type TechnicianBlockout,
+} from "@/data/manager-mock";
 import { guestDuration } from "@/data/schedule";
 import { technicianRows } from "@/data/technician-state";
 import { technicianStation } from "@/data/salon";
 import type { CheckInRecord } from "@/data/check-in-store";
 
 /**
- * Customer-facing check-in logic.
+ * Kiosk logic for the entrance tablet.
  *
- * Everything here answers only the three questions a customer cares about:
- * "is this my appointment?", "am I checked in?" and "where do I go / how long
- * do I wait?". No turn values, no revenue, no queue internals.
+ * Phone number is the primary lookup key. Nothing here exposes turns, revenue,
+ * queue order or other customers — the customer only ever learns whether they
+ * are checked in, roughly how long the wait is, and which technician/station
+ * belongs to them.
  */
 
 export type MatchedAppointment = {
@@ -17,136 +24,173 @@ export type MatchedAppointment = {
   guest: BookingGuest;
   timeLabel: string;
   serviceLabel: string;
-  /** Requested technician name, or undefined for "Any Available". */
+  /** Requested technician name, or undefined for "Any Available Technician". */
   technicianLabel?: string;
+  /** Station of the requested technician, purely informational. */
+  station?: number;
 };
 
 export function digits(value: string): string {
   return value.replace(/\D/g, "").slice(-10);
 }
 
-/** Match on phone first, then name — plus a generous time window around now. */
-export function findMatches(
-  appointments: Appointment[],
-  name: string,
-  phone: string,
-  alreadyCheckedIn: CheckInRecord[],
-  approxMinutes?: number,
-): MatchedAppointment[] {
-  const phoneKey = digits(phone);
-  const nameKey = name.trim().toLowerCase();
-  const taken = new Set(
-    alreadyCheckedIn
+export function formatPhone(value: string): string {
+  const raw = value.replace(/\D/g, "").slice(0, 10);
+  if (raw.length <= 3) return raw;
+  if (raw.length <= 6) return `(${raw.slice(0, 3)}) ${raw.slice(3)}`;
+  return `(${raw.slice(0, 3)}) ${raw.slice(3, 6)}-${raw.slice(6)}`;
+}
+
+export const phoneReady = (value: string) => digits(value).length >= 7;
+
+function toMatch(appointment: Appointment, guest: BookingGuest): MatchedAppointment {
+  const requested = guest.requestedTechnicianId ?? (guest.technicianId !== "any" ? guest.technicianId : undefined);
+  const station = requested ? technicianStation(requested) : undefined;
+  return {
+    appointment,
+    guest,
+    timeLabel: appointment.time,
+    serviceLabel: guestServiceLabel(guest),
+    ...(requested ? { technicianLabel: technicianName(requested) } : {}),
+    ...(station ? { station } : {}),
+  };
+}
+
+function alreadyIn(records: CheckInRecord[]): Set<string> {
+  return new Set(
+    records
       .filter((record) => record.kind === "Appointment")
       .map((record) => `${record.appointmentId}:${record.guestId}`),
   );
+}
 
+/** Primary lookup: phone only. Returns every guest on every matching booking. */
+export function findByPhone(
+  appointments: Appointment[],
+  phone: string,
+  records: CheckInRecord[],
+): MatchedAppointment[] {
+  const key = digits(phone);
+  if (key.length < 7) return [];
+  const taken = alreadyIn(records);
   const results: MatchedAppointment[] = [];
 
   for (const appointment of appointments) {
-    const phoneHit = phoneKey.length >= 7 && digits(appointment.phone) === phoneKey;
-    const nameHit =
-      nameKey.length >= 2 &&
-      (appointment.title.toLowerCase().includes(nameKey) ||
-        appointment.primaryContact.toLowerCase().includes(nameKey) ||
-        appointment.guests.some((guest) => guest.name.toLowerCase().includes(nameKey)));
-    if (!phoneHit && !nameHit) continue;
-    if (approxMinutes !== undefined && Math.abs(appointment.minutes - approxMinutes) > 120) continue;
-
+    if (appointment.source === "Walk-In") continue;
+    if (digits(appointment.phone) !== key) continue;
     for (const guest of appointment.guests) {
       if (guest.status === "Cancelled") continue;
       if (taken.has(`${appointment.id}:${guest.id}`)) continue;
-      // On a name-only match, prefer the guest whose own name matches.
-      if (!phoneHit && nameKey.length >= 2) {
-        const guestNameHit = guest.name.toLowerCase().includes(nameKey);
-        const partyHit = appointment.title.toLowerCase().includes(nameKey);
-        if (!guestNameHit && !partyHit) continue;
-      }
-      results.push({
-        appointment,
-        guest,
-        timeLabel: appointment.time,
-        serviceLabel: guestServiceLabel(guest),
-        ...(guest.technicianId !== "any"
-          ? { technicianLabel: technicianName(guest.technicianId) }
-          : {}),
-      });
+      results.push(toMatch(appointment, guest));
     }
   }
 
   return results.sort((a, b) => a.appointment.minutes - b.appointment.minutes);
 }
 
-/** Friendly, deliberately fuzzy wait window. */
-export function waitRangeLabel(minutes: number): string {
-  if (minutes <= 8) return "About 5–10 minutes";
-  if (minutes <= 16) return "About 10–15 minutes";
-  if (minutes <= 25) return "About 15–20 minutes";
-  if (minutes <= 35) return "About 20–30 minutes";
-  if (minutes <= 50) return "About 30–45 minutes";
-  return "About 45–60 minutes";
+/** Fallback lookup when the phone found nothing: name + approximate time. */
+export function findByNameAndTime(
+  appointments: Appointment[],
+  name: string,
+  approxMinutes: number | undefined,
+  records: CheckInRecord[],
+): MatchedAppointment[] {
+  const nameKey = name.trim().toLowerCase();
+  if (nameKey.length < 2) return [];
+  const taken = alreadyIn(records);
+  const results: MatchedAppointment[] = [];
+
+  for (const appointment of appointments) {
+    if (appointment.source === "Walk-In") continue;
+    if (approxMinutes !== undefined && Math.abs(appointment.minutes - approxMinutes) > 90) continue;
+    const partyHit = appointment.title.toLowerCase().includes(nameKey);
+    for (const guest of appointment.guests) {
+      if (guest.status === "Cancelled") continue;
+      if (taken.has(`${appointment.id}:${guest.id}`)) continue;
+      if (!partyHit && !guest.name.toLowerCase().includes(nameKey)) continue;
+      results.push(toMatch(appointment, guest));
+    }
+  }
+
+  return results.sort((a, b) => a.appointment.minutes - b.appointment.minutes);
 }
 
-export type CheckInOutcome =
-  | { ready: true; technicianLabel: string; station: number }
-  | { ready: false; waitLabel: string; technicianLabel?: string };
+/** Parse "2", "2 pm", "2:30", "14:30" into minutes from midnight. */
+export function parseApproxTime(value: string): number | undefined {
+  const text = value.trim().toLowerCase();
+  const match = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/.exec(text);
+  if (!match) return undefined;
+  let hour = Number(match[1]);
+  const minute = Number(match[2] ?? "0");
+  const suffix = match[3];
+  if (hour > 23 || minute > 59) return undefined;
+  if (suffix === "pm" && hour < 12) hour += 12;
+  if (suffix === "am" && hour === 12) hour = 0;
+  // Salon hours are daytime: bare "2" means 2 PM.
+  if (!suffix && hour >= 1 && hour <= 8) hour += 12;
+  return hour * 60 + minute;
+}
 
-export type OutcomeInput = {
+/**
+ * Deliberately broad wait bands. Never a precise number — the board cannot
+ * know whether a chair has actually been cleared.
+ */
+export function waitBandLabel(minutes: number): string {
+  if (minutes <= 5) return "About 0–5 minutes";
+  if (minutes <= 10) return "About 5–10 minutes";
+  if (minutes <= 20) return "About 10–20 minutes";
+  if (minutes <= 30) return "About 20–30 minutes";
+  return "30+ minutes";
+}
+
+export type WaitEstimate =
+  | { known: true; label: string }
+  /** Low confidence — we say a person will help instead of guessing. */
+  | { known: false; label: string };
+
+export type EstimateInput = {
   appointments: Appointment[];
   blockouts: TechnicianBlockout[];
   now: number;
-  /** Requested technician id, "any", or undefined for a walk-in. */
+  /** Requested technician id, or undefined for any-tech / walk-in. */
   technicianId?: string;
-  /** Scheduled start for an appointment check-in. */
+  /** Scheduled start when this is a booked appointment. */
   scheduledMinutes?: number;
-  /** Service length of the arriving guest, for queue estimates. */
-  serviceMinutes?: number;
-  /** How many people are already waiting without a technician. */
+  /** People already waiting without a chair. */
   queueAhead: number;
+  /** Walk-in service length, used to keep the estimate conservative. */
+  serviceMinutes?: number;
 };
 
-/**
- * Prototype estimate only. It reads the same schedule the manager board reads
- * (bookings, block time, technician state) but never exposes any of it.
- */
-export function checkInOutcome(input: OutcomeInput): CheckInOutcome {
+export function estimateWait(input: EstimateInput): WaitEstimate {
   const { appointments, blockouts, now, technicianId, scheduledMinutes, queueAhead } = input;
   const rows = technicianRows(appointments, blockouts, now);
+  const isBooked = scheduledMinutes !== undefined;
 
-  // Specific technician requested.
   if (technicianId && technicianId !== "any") {
     const row = rows.find((item) => item.id === technicianId);
-    const station = technicianStation(technicianId);
-    const dueSoon = scheduledMinutes === undefined || scheduledMinutes <= now + 10;
-
-    if (row?.state === "Available" && dueSoon && station) {
-      return { ready: true, technicianLabel: row.name, station };
-    }
-
-    const freeIn = row?.freeAt !== undefined ? Math.max(0, row.freeAt - now) : 10;
-    const startsIn = scheduledMinutes !== undefined ? Math.max(0, scheduledMinutes - now) : 0;
-    return {
-      ready: false,
-      waitLabel: waitRangeLabel(Math.max(freeIn, startsIn, 5)),
-      ...(row ? { technicianLabel: row.name } : {}),
-    };
+    if (!row || row.state === "Off") return { known: false, label: "A team member will assist you shortly." };
+    const freeIn = row.freeAt !== undefined ? Math.max(0, row.freeAt - now) : 15;
+    const startsIn = isBooked ? Math.max(0, scheduledMinutes - now) : 0;
+    return { known: true, label: waitBandLabel(Math.max(freeIn, startsIn)) };
   }
 
-  // Any available technician / walk-in — depends on open chairs and the queue.
   const freeNow = rows.filter((row) => row.state === "Available").length;
   const soonest = rows.reduce((best, row) => {
     if (row.state === "Available") return 0;
-    const freeIn = row.freeAt !== undefined ? Math.max(0, row.freeAt - now) : 20;
+    const freeIn = row.freeAt !== undefined ? Math.max(0, row.freeAt - now) : 25;
     return Math.min(best, freeIn);
   }, 60);
 
-  const base = freeNow > 0 ? 10 : Math.max(10, soonest);
+  const base = freeNow > 0 ? 5 : Math.max(10, soonest);
   const queuePenalty = Math.max(0, queueAhead - freeNow) * 5;
-  // Appointments keep their priority: booked guests skip the walk-in penalty.
-  const isBookedAnyTech = scheduledMinutes !== undefined;
-  const estimate = isBookedAnyTech ? base + Math.min(queuePenalty, 5) : base + queuePenalty + 5;
+  // Booked guests keep their priority over ordinary walk-ins.
+  const estimate = isBooked
+    ? Math.max(base, scheduledMinutes - now) + Math.min(queuePenalty, 5)
+    : base + queuePenalty + 5;
 
-  return { ready: false, waitLabel: waitRangeLabel(estimate) };
+  if (!isBooked && estimate > 45) return { known: false, label: "A team member will assist you shortly." };
+  return { known: true, label: waitBandLabel(estimate) };
 }
 
 /** Approximate service length used for walk-in estimates. */
