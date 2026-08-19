@@ -95,6 +95,35 @@ function TodayBoard() {
     return () => window.clearInterval(id);
   }, []);
 
+  /**
+   * Front-tablet check-ins (`/check-in`) flow into the same board: walk-ins
+   * become Waiting / Unassigned cards anchored to their check-in time, and
+   * booked guests get an arrival note on their existing booking.
+   */
+  useEffect(() => {
+    const walkIns = walkInAppointments(kioskCheckIns);
+    const arrivals = arrivalTimes(kioskCheckIns);
+    setAppointments((current) => {
+      const known = new Set(current.map((appointment) => appointment.id));
+      const additions = walkIns.filter((appointment) => !known.has(appointment.id));
+      let touched = additions.length > 0;
+      const merged = current.map((appointment) => {
+        const at = arrivals[appointment.id];
+        if (at === undefined) return appointment;
+        const note = `Checked in ${formatMinutes(at)} at the front tablet`;
+        if (appointment.notes?.includes("at the front tablet")) return appointment;
+        touched = true;
+        return {
+          ...appointment,
+          notes: appointment.notes ? `${appointment.notes} · ${note}` : note,
+        };
+      });
+      return touched ? [...merged, ...additions] : current;
+    });
+  }, [kioskCheckIns]);
+
+
+
   useEffect(() => {
     const date = new Date();
     date.setDate(date.getDate() + dayOffset);
