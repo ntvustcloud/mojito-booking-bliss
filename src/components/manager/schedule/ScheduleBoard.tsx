@@ -20,8 +20,9 @@ import {
   findHardConflict,
   formatMinutes,
   formatShortMinutes,
-  isUpcomingUnassigned,
+  isQueued,
   isWaitingNow,
+
   laneStyle,
   layoutLanes,
   minutesToOffset,
@@ -172,20 +173,23 @@ function BlockCard({
         {isWalkIn ? (
           <>
             <Footprints className="size-3 shrink-0" aria-hidden />
-            <span className="truncate">Walk-In</span>
+            <span className="truncate">
+              {inQueue ? `Checked in ${formatShortMinutes(block.anchor)}` : "Walk-In"}
+            </span>
           </>
         ) : (
           <>
             <CalendarDays className="size-3 shrink-0" aria-hidden />
             <span className="truncate">
               {inQueue
-                ? `Appt ${formatShortMinutes(block.start)}`
+                ? `Appt ${formatShortMinutes(block.anchor)}`
                 : dense
                   ? formatShortMinutes(block.start)
                   : `${formatShortMinutes(block.start)}–${formatShortMinutes(block.start + block.duration)}`}
             </span>
           </>
         )}
+
         {block.isGroup && <Users className="size-3 shrink-0" aria-hidden />}
         {hiddenCount > 0 && (
           <span
@@ -254,41 +258,56 @@ export function ScheduleBoard({
   registerScrollToNow?: (scrollToNow: (() => void) | null) => void;
 }) {
   const blocks = useMemo(() => buildBlocks(appointments), [appointments]);
-  const waitingNow = useMemo(
+  /** Everything still needing a chair, ordered by its own logical time. */
+  const queued = useMemo(
     () =>
       blocks
-        .filter((block) => isWaitingNow(block, nowMinutes))
+        .filter(isQueued)
         .sort(
           (a, b) =>
-            queuePriority(a, nowMinutes) - queuePriority(b, nowMinutes) || a.anchor - b.anchor,
+            a.anchor - b.anchor ||
+            queuePriority(a, nowMinutes) - queuePriority(b, nowMinutes),
         ),
     [blocks, nowMinutes],
   );
-  const upcoming = useMemo(
-    () =>
-      blocks
-        .filter((block) => isUpcomingUnassigned(block, nowMinutes))
-        .sort((a, b) => a.start - b.start),
-    [blocks, nowMinutes],
+  const waitingNow = useMemo(
+    () => queued.filter((block) => isWaitingNow(block, nowMinutes)),
+    [queued, nowMinutes],
   );
-  // Side-by-side lanes for unassigned cards that share a time range.
-  const upcomingLanes = useMemo(
+  // Side-by-side lanes for queued cards that share a time range.
+  const queuedLanes = useMemo(
     () =>
       layoutLanes(
-        upcoming.map((block) => ({
+        queued.map((block) => ({
           key: block.key,
-          start: block.start,
+          start: block.anchor,
           duration: block.duration,
         })),
       ),
-    [upcoming],
+    [queued],
   );
+  /** Tiny downward step so same-time walk-ins read as check-in order 1, 2, 3… */
+  const queueStagger = useMemo(() => {
+    const map = new Map<string, number>();
+    const walkIns = queued.filter((block) => block.source === "Walk-In");
+    let anchorStart: number | null = null;
+    let order = 0;
+    for (const block of walkIns) {
+      if (anchorStart === null || block.anchor - anchorStart > 10) {
+        anchorStart = block.anchor;
+        order = 0;
+      } else {
+        order += 1;
+      }
+      map.set(block.key, order * QUEUE_STAGGER);
+    }
+    return map;
+  }, [queued]);
   const dragged = useRef<ScheduleBlock | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [hover, setHover] = useState<{ technicianId: string; start: number } | null>(null);
   const [dragging, setDragging] = useState<ScheduleBlock | null>(null);
-  const queueRef = useRef<HTMLDivElement | null>(null);
-  const [queueHeight, setQueueHeight] = useState(0);
+
 
   // ---- Turn Recommendation System (decision support only) ----
   const totals = useMemo(() => turnTotals(turnEvents), [turnEvents]);
@@ -321,9 +340,10 @@ export function ScheduleBoard({
 
   const suggestions = useMemo(() => {
     const map = new Map<string, TurnCandidate[]>();
-    for (const block of [...waitingNow, ...upcoming]) map.set(block.key, candidatesFor(block));
+    for (const block of queued) map.set(block.key, candidatesFor(block));
     return map;
-  }, [waitingNow, upcoming, candidatesFor]);
+  }, [queued, candidatesFor]);
+
 
   // Drag highlight: recommendation quality per technician column.
   const dragQuality = useMemo(() => {
@@ -364,16 +384,8 @@ export function ScheduleBoard({
     container.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
   }, [nowMinutes]);
 
-  // Keep upcoming unassigned cards from sliding under the live waiting queue.
-  useEffect(() => {
-    const node = queueRef.current;
-    if (!node || typeof ResizeObserver === "undefined") return;
-    const measure = () => setQueueHeight(node.offsetHeight);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  });
+
+
 
   useEffect(() => {
     registerScrollToNow?.(nowVisible ? scrollToNow : null);
@@ -469,7 +481,7 @@ export function ScheduleBoard({
                 Waiting / Unassigned
               </p>
               <p className="text-[11px] font-bold text-status-warn-fg">
-                {waitingNow.length} waiting now · {upcoming.length} upcoming
+                {waitingNow.length} waiting now · {queued.length - waitingNow.length} upcoming
               </p>
             </div>
             {technicians.map((technician) => {
@@ -590,49 +602,18 @@ export function ScheduleBoard({
               className="relative border-r border-border bg-status-warn-bg/20"
               style={{ height: totalHeight }}
             >
-              {/* Waiting now — a live queue stacked at the top of the column */}
-              <div
-                ref={queueRef}
-                className="relative z-30 space-y-2 border-b border-border bg-card p-2 shadow-sm"
-              >
-                <p className="text-[10px] font-extrabold tracking-[0.1em] uppercase text-status-warn-fg">
-                  Waiting now
-                </p>
-                {waitingNow.map((block) => (
-                  <div key={block.key} className="space-y-1">
-                    <div className="h-[4.5rem]">
-                      <BlockCard
-                        block={block}
-                        waitedFor={waitingMinutes(block, nowMinutes)}
-                        now={nowMinutes}
-                        onOpen={() => onOpenAppointment(block.appointmentId)}
-                        {...dragProps(block)}
-                      />
-                    </div>
-                    <TurnSuggestion candidates={suggestions.get(block.key) ?? []} />
-                  </div>
-                ))}
-                {waitingNow.length === 0 && (
-                  <p className="text-xs text-muted-foreground">Nobody waiting right now.</p>
-                )}
-                {upcoming.length > 0 && (
-                  <p className="pt-1 text-[10px] font-extrabold tracking-[0.1em] uppercase text-muted-foreground">
-                    Upcoming unassigned ↓
-                  </p>
-                )}
-              </div>
-
-              {/* Upcoming unassigned — parked on their real scheduled time, lanes on overlap */}
-              {upcoming.map((block) => {
-                const placement = upcomingLanes.get(block.key);
+              {/* Every queued card sits on its own logical time: appointment
+                  scheduled time, walk-in check-in time. No list stacking. */}
+              {queued.map((block) => {
+                const placement = queuedLanes.get(block.key);
                 const laneCount = placement?.lanes ?? 1;
-                const stagger = (placement?.lane ?? 0) * QUEUE_STAGGER;
+                const stagger = queueStagger.get(block.key) ?? 0;
                 return (
                   <div
                     key={block.key}
                     className="absolute inset-x-1 z-10"
                     style={{
-                      top: Math.max(queueHeight + 4, minutesToOffset(block.start)) + stagger,
+                      top: minutesToOffset(block.anchor) + stagger,
                       height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
                     }}
                   >
@@ -647,6 +628,7 @@ export function ScheduleBoard({
                               ? placement.hiddenCount
                               : 0
                           }
+                          waitedFor={waitingMinutes(block, nowMinutes)}
                           now={nowMinutes}
                           onOpen={() => onOpenAppointment(block.appointmentId)}
                           {...dragProps(block)}
@@ -660,6 +642,12 @@ export function ScheduleBoard({
                   </div>
                 );
               })}
+              {queued.length === 0 && (
+                <p className="absolute inset-x-2 top-2 text-xs text-muted-foreground">
+                  Nobody waiting right now.
+                </p>
+              )}
+
 
               {nowVisible && (
                 <div
