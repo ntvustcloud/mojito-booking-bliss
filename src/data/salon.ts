@@ -18,6 +18,8 @@ export type Technician = {
   name: string;
   specialties: string[];
   initials: string;
+  /** Chair the technician works from — shown to a customer only when ready. */
+  stationNumber?: number;
 };
 
 export const technicians: Technician[] = [
@@ -32,26 +34,35 @@ export const technicians: Technician[] = [
     name: "Mai",
     specialties: ["Gel-X", "Fine line art"],
     initials: "M",
+    stationNumber: 4,
   },
   {
     id: "linh",
     name: "Linh",
     specialties: ["Signature pedicure", "Dip powder"],
     initials: "L",
+    stationNumber: 6,
   },
   {
     id: "tran",
     name: "Tran",
     specialties: ["Acrylic sculpting", "Shaping"],
     initials: "T",
+    stationNumber: 8,
   },
   {
     id: "rosa",
     name: "Rosa",
     specialties: ["Spa manicure", "Nail art"],
     initials: "R",
+    stationNumber: 10,
   },
 ];
+
+/** Station number for a technician, when they have one. */
+export function technicianStation(id: string): number | undefined {
+  return technicians.find((technician) => technician.id === id)?.stationNumber;
+}
 
 export const reviews = [
   {

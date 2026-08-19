@@ -45,6 +45,7 @@ import {
   type TechnicianBlockout,
 } from "@/data/manager-mock";
 import { technicianRows } from "@/data/technician-state";
+import { arrivalTimes, useCheckIns, walkInAppointments } from "@/data/check-in-store";
 import { turnValueFor, type TurnEvent } from "@/data/turn-system";
 
 export const Route = createFileRoute("/manager/today")({
@@ -83,6 +84,7 @@ function TodayBoard() {
   const [canScrollToNow, setCanScrollToNow] = useState(false);
   const [nowMinutes, setNowMinutes] = useState<number | null>(null);
   const [dateLabel, setDateLabel] = useState("");
+  const kioskCheckIns = useCheckIns();
 
   // Client-only clock (keeps SSR markup stable) that advances the time line.
   useEffect(() => {
@@ -94,6 +96,35 @@ function TodayBoard() {
     const id = window.setInterval(tick, 60_000);
     return () => window.clearInterval(id);
   }, []);
+
+  /**
+   * Front-tablet check-ins (`/check-in`) flow into the same board: walk-ins
+   * become Waiting / Unassigned cards anchored to their check-in time, and
+   * booked guests get an arrival note on their existing booking.
+   */
+  useEffect(() => {
+    const walkIns = walkInAppointments(kioskCheckIns);
+    const arrivals = arrivalTimes(kioskCheckIns);
+    setAppointments((current) => {
+      const known = new Set(current.map((appointment) => appointment.id));
+      const additions = walkIns.filter((appointment) => !known.has(appointment.id));
+      let touched = additions.length > 0;
+      const merged = current.map((appointment) => {
+        const at = arrivals[appointment.id];
+        if (at === undefined) return appointment;
+        const note = `Checked in ${formatMinutes(at)} at the front tablet`;
+        if (appointment.notes?.includes("at the front tablet")) return appointment;
+        touched = true;
+        return {
+          ...appointment,
+          notes: appointment.notes ? `${appointment.notes} · ${note}` : note,
+        };
+      });
+      return touched ? [...merged, ...additions] : current;
+    });
+  }, [kioskCheckIns]);
+
+
 
   useEffect(() => {
     const date = new Date();
