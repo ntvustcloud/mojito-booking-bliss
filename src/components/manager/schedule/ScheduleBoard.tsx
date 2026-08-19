@@ -590,49 +590,18 @@ export function ScheduleBoard({
               className="relative border-r border-border bg-status-warn-bg/20"
               style={{ height: totalHeight }}
             >
-              {/* Waiting now — a live queue stacked at the top of the column */}
-              <div
-                ref={queueRef}
-                className="relative z-30 space-y-2 border-b border-border bg-card p-2 shadow-sm"
-              >
-                <p className="text-[10px] font-extrabold tracking-[0.1em] uppercase text-status-warn-fg">
-                  Waiting now
-                </p>
-                {waitingNow.map((block) => (
-                  <div key={block.key} className="space-y-1">
-                    <div className="h-[4.5rem]">
-                      <BlockCard
-                        block={block}
-                        waitedFor={waitingMinutes(block, nowMinutes)}
-                        now={nowMinutes}
-                        onOpen={() => onOpenAppointment(block.appointmentId)}
-                        {...dragProps(block)}
-                      />
-                    </div>
-                    <TurnSuggestion candidates={suggestions.get(block.key) ?? []} />
-                  </div>
-                ))}
-                {waitingNow.length === 0 && (
-                  <p className="text-xs text-muted-foreground">Nobody waiting right now.</p>
-                )}
-                {upcoming.length > 0 && (
-                  <p className="pt-1 text-[10px] font-extrabold tracking-[0.1em] uppercase text-muted-foreground">
-                    Upcoming unassigned ↓
-                  </p>
-                )}
-              </div>
-
-              {/* Upcoming unassigned — parked on their real scheduled time, lanes on overlap */}
-              {upcoming.map((block) => {
-                const placement = upcomingLanes.get(block.key);
+              {/* Every queued card sits on its own logical time: appointment
+                  scheduled time, walk-in check-in time. No list stacking. */}
+              {queued.map((block) => {
+                const placement = queuedLanes.get(block.key);
                 const laneCount = placement?.lanes ?? 1;
-                const stagger = (placement?.lane ?? 0) * QUEUE_STAGGER;
+                const stagger = queueStagger.get(block.key) ?? 0;
                 return (
                   <div
                     key={block.key}
                     className="absolute inset-x-1 z-10"
                     style={{
-                      top: Math.max(queueHeight + 4, minutesToOffset(block.start)) + stagger,
+                      top: minutesToOffset(block.anchor) + stagger,
                       height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
                     }}
                   >
@@ -647,6 +616,7 @@ export function ScheduleBoard({
                               ? placement.hiddenCount
                               : 0
                           }
+                          waitedFor={waitingMinutes(block, nowMinutes)}
                           now={nowMinutes}
                           onOpen={() => onOpenAppointment(block.appointmentId)}
                           {...dragProps(block)}
@@ -660,6 +630,12 @@ export function ScheduleBoard({
                   </div>
                 );
               })}
+              {queued.length === 0 && (
+                <p className="absolute inset-x-2 top-2 text-xs text-muted-foreground">
+                  Nobody waiting right now.
+                </p>
+              )}
+
 
               {nowVisible && (
                 <div
