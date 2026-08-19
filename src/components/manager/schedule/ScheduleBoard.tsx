@@ -20,8 +20,9 @@ import {
   findHardConflict,
   formatMinutes,
   formatShortMinutes,
-  isUpcomingUnassigned,
+  isQueued,
   isWaitingNow,
+
   laneStyle,
   layoutLanes,
   minutesToOffset,
