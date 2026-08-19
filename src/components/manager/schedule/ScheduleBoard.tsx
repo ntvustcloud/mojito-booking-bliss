@@ -254,41 +254,56 @@ export function ScheduleBoard({
   registerScrollToNow?: (scrollToNow: (() => void) | null) => void;
 }) {
   const blocks = useMemo(() => buildBlocks(appointments), [appointments]);
-  const waitingNow = useMemo(
+  /** Everything still needing a chair, ordered by its own logical time. */
+  const queued = useMemo(
     () =>
       blocks
-        .filter((block) => isWaitingNow(block, nowMinutes))
+        .filter(isQueued)
         .sort(
           (a, b) =>
-            queuePriority(a, nowMinutes) - queuePriority(b, nowMinutes) || a.anchor - b.anchor,
+            a.anchor - b.anchor ||
+            queuePriority(a, nowMinutes) - queuePriority(b, nowMinutes),
         ),
     [blocks, nowMinutes],
   );
-  const upcoming = useMemo(
-    () =>
-      blocks
-        .filter((block) => isUpcomingUnassigned(block, nowMinutes))
-        .sort((a, b) => a.start - b.start),
-    [blocks, nowMinutes],
+  const waitingNow = useMemo(
+    () => queued.filter((block) => isWaitingNow(block, nowMinutes)),
+    [queued, nowMinutes],
   );
-  // Side-by-side lanes for unassigned cards that share a time range.
-  const upcomingLanes = useMemo(
+  // Side-by-side lanes for queued cards that share a time range.
+  const queuedLanes = useMemo(
     () =>
       layoutLanes(
-        upcoming.map((block) => ({
+        queued.map((block) => ({
           key: block.key,
-          start: block.start,
+          start: block.anchor,
           duration: block.duration,
         })),
       ),
-    [upcoming],
+    [queued],
   );
+  /** Tiny downward step so same-time walk-ins read as check-in order 1, 2, 3… */
+  const queueStagger = useMemo(() => {
+    const map = new Map<string, number>();
+    const walkIns = queued.filter((block) => block.source === "Walk-In");
+    let anchorStart: number | null = null;
+    let order = 0;
+    for (const block of walkIns) {
+      if (anchorStart === null || block.anchor - anchorStart > 10) {
+        anchorStart = block.anchor;
+        order = 0;
+      } else {
+        order += 1;
+      }
+      map.set(block.key, order * QUEUE_STAGGER);
+    }
+    return map;
+  }, [queued]);
   const dragged = useRef<ScheduleBlock | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [hover, setHover] = useState<{ technicianId: string; start: number } | null>(null);
   const [dragging, setDragging] = useState<ScheduleBlock | null>(null);
-  const queueRef = useRef<HTMLDivElement | null>(null);
-  const [queueHeight, setQueueHeight] = useState(0);
+
 
   // ---- Turn Recommendation System (decision support only) ----
   const totals = useMemo(() => turnTotals(turnEvents), [turnEvents]);
