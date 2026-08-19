@@ -42,7 +42,7 @@ export const Route = createFileRoute("/check-in")({
       },
     ],
   }),
-  component: CheckInKiosk;
+  component: CheckInKiosk,
 });
 
 type Step =
