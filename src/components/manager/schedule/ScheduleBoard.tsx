@@ -336,9 +336,10 @@ export function ScheduleBoard({
 
   const suggestions = useMemo(() => {
     const map = new Map<string, TurnCandidate[]>();
-    for (const block of [...waitingNow, ...upcoming]) map.set(block.key, candidatesFor(block));
+    for (const block of queued) map.set(block.key, candidatesFor(block));
     return map;
-  }, [waitingNow, upcoming, candidatesFor]);
+  }, [queued, candidatesFor]);
+
 
   // Drag highlight: recommendation quality per technician column.
   const dragQuality = useMemo(() => {
