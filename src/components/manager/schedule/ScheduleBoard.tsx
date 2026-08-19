@@ -484,7 +484,7 @@ export function ScheduleBoard({
                 Waiting / Unassigned
               </p>
               <p className="text-[11px] font-bold text-status-warn-fg">
-                {waitingNow.length} waiting now · {upcoming.length} upcoming
+                {waitingNow.length} waiting now · {queued.length - waitingNow.length} upcoming
               </p>
             </div>
             {technicians.map((technician) => {
