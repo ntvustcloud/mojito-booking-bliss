@@ -192,6 +192,58 @@ export function findConflict(
   );
 }
 
+/**
+ * Real salons run a few minutes over. An overlap up to this many minutes is
+ * allowed (shown in amber), anything longer is a genuine double-booking.
+ */
+export const SMALL_OVERLAP_MINUTES = 15;
+
+/** Largest overlap in minutes the placement would create with existing work. */
+export function overlapMinutes(
+  blocks: ScheduleBlock[],
+  technicianId: string,
+  start: number,
+  duration: number,
+  ignoreKey: string,
+): number {
+  const end = start + duration;
+  return blocksForTechnician(blocks, technicianId)
+    .filter((block) => block.key !== ignoreKey && isActiveBlock(block))
+    .reduce(
+      (worst, block) =>
+        Math.max(worst, Math.min(end, block.start + block.duration) - Math.max(start, block.start)),
+      0,
+    );
+}
+
+/** Overlap this already-placed card has with its technician's other cards. */
+export function blockOverlapMinutes(blocks: ScheduleBlock[], block: ScheduleBlock): number {
+  if (!isActiveBlock(block) || block.technicianId === "any") return 0;
+  return Math.max(
+    0,
+    overlapMinutes(blocks, block.technicianId, block.start, block.duration, block.key),
+  );
+}
+
+/** Overlap too large to be an acceptable few-minutes run-over. */
+export function findHardConflict(
+  blocks: ScheduleBlock[],
+  technicianId: string,
+  start: number,
+  duration: number,
+  ignoreKey: string,
+): ScheduleBlock | null {
+  const end = start + duration;
+  return (
+    blocksForTechnician(blocks, technicianId).find((block) => {
+      if (block.key === ignoreKey || !isActiveBlock(block)) return false;
+      const overlap = Math.min(end, block.start + block.duration) - Math.max(start, block.start);
+      return overlap > SMALL_OVERLAP_MINUTES;
+    }) ?? null
+  );
+}
+
+
 /** Next free moment for a technician, used in the column header. */
 export function nextFreeMinute(blocks: ScheduleBlock[], technicianId: string, now: number): number {
   let cursor = Math.max(now, DAY_START_MINUTES);

@@ -16,7 +16,8 @@ import {
   SLOT_MINUTES,
   buildBlocks,
   findBlockout,
-  findConflict,
+  blockOverlapMinutes,
+  findHardConflict,
   formatMinutes,
   formatShortMinutes,
   isUpcomingUnassigned,
@@ -119,6 +120,7 @@ function BlockCard({
   compact,
   dense,
   hiddenCount = 0,
+  overlap = 0,
   waitedFor,
   now,
   onOpen,
@@ -130,6 +132,8 @@ function BlockCard({
   dense?: boolean;
   /** Overlapping cards in this cluster that didn't fit into a lane. */
   hiddenCount?: number;
+  /** Minutes this card overlaps the technician's neighbouring work. */
+  overlap?: number;
   waitedFor?: number | null;
   now: number | null;
   onOpen: () => void;
@@ -139,6 +143,7 @@ function BlockCard({
   const StateIcon = visual.icon;
   const isWalkIn = block.source === "Walk-In";
   const inQueue = waitedFor !== undefined;
+  const overlapped = overlap > 0 && block.status !== "Cancelled";
 
   return (
     <button
@@ -146,6 +151,9 @@ function BlockCard({
       draggable
       onDragStart={onDragStart}
       onClick={onOpen}
+      {...(overlapped
+        ? { title: `${overlap} min overlap with previous appointment` }
+        : {})}
       className={cn(
         "group relative flex h-full w-full flex-col overflow-hidden rounded-lg border px-2 py-1 text-left leading-tight shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-shadow hover:shadow-md",
         dense && "px-1 py-0.5",
@@ -156,6 +164,8 @@ function BlockCard({
           ),
         block.isGroup && (dense ? "pl-1.5" : "pl-2.5"),
         visual.card,
+        overlapped &&
+          "bg-status-warn-bg text-status-warn-fg border-status-warn-fg/50",
       )}
     >
       <span className="flex items-center gap-1 overflow-hidden text-[10px] font-extrabold tracking-wide whitespace-nowrap opacity-85">
@@ -401,7 +411,7 @@ export function ScheduleBoard({
         );
         return;
       }
-      const conflict = findConflict(blocks, technicianId, start, block.duration, block.key);
+      const conflict = findHardConflict(blocks, technicianId, start, block.duration, block.key);
       if (conflict) {
         toast.error(
           `${technicianName(technicianId)} has ${conflict.guestName} at ${formatShortMinutes(conflict.start)}. This service needs about ${block.duration} minutes.`,
@@ -774,6 +784,7 @@ export function ScheduleBoard({
                                 ? placement.hiddenCount
                                 : 0
                             }
+                            overlap={blockOverlapMinutes(blocks, block)}
                             now={nowMinutes}
                             onOpen={() => onOpenAppointment(block.appointmentId)}
                             {...dragProps(block)}

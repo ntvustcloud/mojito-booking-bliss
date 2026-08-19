@@ -3,6 +3,8 @@ import {
   blocksForTechnician,
   findBlockout,
   findConflict,
+  overlapMinutes,
+  SMALL_OVERLAP_MINUTES,
   formatShortMinutes,
   nextBlockStart,
   nextFreeMinute,
@@ -274,7 +276,16 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
       };
     }
 
+    const overlap = overlapMinutes(blocks, technician.id, start, duration, ignoreKey);
     const conflict = findConflict(blocks, technician.id, start, duration, ignoreKey);
+    if (conflict && overlap <= SMALL_OVERLAP_MINUTES) {
+      return {
+        ...base,
+        quality: "limited" as const,
+        detail: `${overlap} min overlap with ${conflict.guestName} · may start slightly late`,
+        priorityPreserved: false,
+      };
+    }
     if (conflict) {
       const free = nextFreeMinute(blocks, technician.id, Math.max(now, start));
       const busyNow = conflict.start <= now && conflict.start + conflict.duration > now;
@@ -293,7 +304,7 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
     const wall = Math.min(next ?? Infinity, nextBreak?.start ?? Infinity);
     const gap = wall === Infinity ? Infinity : wall - start;
 
-    if (gap < duration) {
+    if (gap < duration - SMALL_OVERLAP_MINUTES) {
       return {
         ...base,
         quality: "ineligible" as const,
