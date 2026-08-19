@@ -76,6 +76,8 @@ export type ScheduleBlock = {
   /** Set when the customer specifically requested this technician (½ turn). */
   requestedTechnicianId?: string;
   status: AppointmentStatus;
+  /** Set once the guest has checked in at the front tablet. */
+  arrivedAt?: number;
   /**
    * Original logical time: scheduled time for an appointment, check-in time for
    * a walk-in. Never changed by drag-and-drop, so a card dropped back into
@@ -110,6 +112,9 @@ export function buildBlocks(appointments: Appointment[]): ScheduleBlock[] {
           ? { requestedTechnicianId: guest.requestedTechnicianId }
           : {}),
         status: guest.status,
+        ...(guest.arrivedAtMinutes !== undefined
+          ? { arrivedAt: guest.arrivedAtMinutes }
+          : {}),
         anchor: appointment.minutes,
         // Unassigned cards always sit on their original logical time.
         start: assigned ? (guest.startMinutes ?? appointment.minutes) : appointment.minutes,

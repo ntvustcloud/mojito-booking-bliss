@@ -45,7 +45,7 @@ import {
   type TechnicianBlockout,
 } from "@/data/manager-mock";
 import { technicianRows } from "@/data/technician-state";
-import { arrivalTimes, useCheckIns, walkInAppointments } from "@/data/check-in-store";
+import { arrivedGuests, useCheckIns, walkInAppointments } from "@/data/check-in-store";
 import { turnValueFor, type TurnEvent } from "@/data/turn-system";
 
 export const Route = createFileRoute("/manager/today")({
@@ -104,25 +104,27 @@ function TodayBoard() {
    */
   useEffect(() => {
     const walkIns = walkInAppointments(kioskCheckIns);
-    const arrivals = arrivalTimes(kioskCheckIns);
+    const arrivals = arrivedGuests(kioskCheckIns);
     setAppointments((current) => {
       const known = new Set(current.map((appointment) => appointment.id));
       const additions = walkIns.filter((appointment) => !known.has(appointment.id));
       let touched = additions.length > 0;
       const merged = current.map((appointment) => {
-        const at = arrivals[appointment.id];
-        if (at === undefined) return appointment;
-        const note = `Checked in ${formatMinutes(at)} at the front tablet`;
-        if (appointment.notes?.includes("at the front tablet")) return appointment;
+        let guestTouched = false;
+        const guests = appointment.guests.map((guest) => {
+          const at = arrivals[`${appointment.id}:${guest.id}`];
+          if (at === undefined || guest.arrivedAtMinutes === at) return guest;
+          guestTouched = true;
+          return { ...guest, arrivedAtMinutes: at };
+        });
+        if (!guestTouched) return appointment;
         touched = true;
-        return {
-          ...appointment,
-          notes: appointment.notes ? `${appointment.notes} · ${note}` : note,
-        };
+        return { ...appointment, guests };
       });
       return touched ? [...merged, ...additions] : current;
     });
   }, [kioskCheckIns]);
+
 
 
 
