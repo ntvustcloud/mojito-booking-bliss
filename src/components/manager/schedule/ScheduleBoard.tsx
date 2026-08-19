@@ -173,20 +173,23 @@ function BlockCard({
         {isWalkIn ? (
           <>
             <Footprints className="size-3 shrink-0" aria-hidden />
-            <span className="truncate">Walk-In</span>
+            <span className="truncate">
+              {inQueue ? `Checked in ${formatShortMinutes(block.anchor)}` : "Walk-In"}
+            </span>
           </>
         ) : (
           <>
             <CalendarDays className="size-3 shrink-0" aria-hidden />
             <span className="truncate">
               {inQueue
-                ? `Appt ${formatShortMinutes(block.start)}`
+                ? `Appt ${formatShortMinutes(block.anchor)}`
                 : dense
                   ? formatShortMinutes(block.start)
                   : `${formatShortMinutes(block.start)}–${formatShortMinutes(block.start + block.duration)}`}
             </span>
           </>
         )}
+
         {block.isGroup && <Users className="size-3 shrink-0" aria-hidden />}
         {hiddenCount > 0 && (
           <span
