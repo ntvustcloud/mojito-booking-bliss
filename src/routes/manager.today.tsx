@@ -45,6 +45,7 @@ import {
   type TechnicianBlockout,
 } from "@/data/manager-mock";
 import { technicianRows } from "@/data/technician-state";
+import { arrivalTimes, useCheckIns, walkInAppointments } from "@/data/check-in-store";
 import { turnValueFor, type TurnEvent } from "@/data/turn-system";
 
 export const Route = createFileRoute("/manager/today")({
@@ -83,6 +84,7 @@ function TodayBoard() {
   const [canScrollToNow, setCanScrollToNow] = useState(false);
   const [nowMinutes, setNowMinutes] = useState<number | null>(null);
   const [dateLabel, setDateLabel] = useState("");
+  const kioskCheckIns = useCheckIns();
 
   // Client-only clock (keeps SSR markup stable) that advances the time line.
   useEffect(() => {
