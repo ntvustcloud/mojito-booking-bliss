@@ -126,14 +126,17 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const isManager = useRouterState({
-    select: (state) => state.location.pathname.startsWith("/manager"),
+  const isBareShell = useRouterState({
+    select: (state) =>
+      state.location.pathname.startsWith("/manager") ||
+      state.location.pathname.startsWith("/check-in"),
   });
 
-  if (isManager) {
+  if (isBareShell) {
     return (
       <QueryClientProvider client={queryClient}>
-        {/* Manager portal has its own shell — no customer header, footer or tray. */}
+        {/* Manager portal and the entrance kiosk have their own shells — no
+            customer header, footer or appointment tray. */}
         <Outlet />
         <Toaster position="bottom-center" />
       </QueryClientProvider>

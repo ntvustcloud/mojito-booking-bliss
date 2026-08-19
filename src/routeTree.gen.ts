@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as BookRouteImport } from './routes/book'
+import { Route as CheckInRouteImport } from './routes/check-in'
 import { Route as GalleryRouteImport } from './routes/gallery'
 import { Route as ManagerRouteImport } from './routes/manager'
 import { Route as ServicesRouteImport } from './routes/services'
@@ -31,6 +32,11 @@ const AboutRoute = AboutRouteImport.update({
 const BookRoute = BookRouteImport.update({
   id: '/book',
   path: '/book',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckInRoute = CheckInRouteImport.update({
+  id: '/check-in',
+  path: '/check-in',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GalleryRoute = GalleryRouteImport.update({
@@ -63,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/book': typeof BookRoute
+  '/check-in': typeof CheckInRoute
   '/gallery': typeof GalleryRoute
   '/manager': typeof ManagerRouteWithChildren
   '/services': typeof ServicesRoute
@@ -73,6 +80,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/book': typeof BookRoute
+  '/check-in': typeof CheckInRoute
   '/gallery': typeof GalleryRoute
   '/services': typeof ServicesRoute
   '/manager/today': typeof ManagerTodayRoute
@@ -83,6 +91,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/book': typeof BookRoute
+  '/check-in': typeof CheckInRoute
   '/gallery': typeof GalleryRoute
   '/manager': typeof ManagerRouteWithChildren
   '/services': typeof ServicesRoute
@@ -95,6 +104,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/book'
+    | '/check-in'
     | '/gallery'
     | '/manager'
     | '/services'
@@ -105,6 +115,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/book'
+    | '/check-in'
     | '/gallery'
     | '/services'
     | '/manager/today'
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/book'
+    | '/check-in'
     | '/gallery'
     | '/manager'
     | '/services'
@@ -125,6 +137,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   BookRoute: typeof BookRoute
+  CheckInRoute: typeof CheckInRoute
   GalleryRoute: typeof GalleryRoute
   ManagerRoute: typeof ManagerRouteWithChildren
   ServicesRoute: typeof ServicesRoute
@@ -151,6 +164,13 @@ declare module '@tanstack/react-router' {
       path: '/book'
       fullPath: '/book'
       preLoaderRoute: typeof BookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/check-in': {
+      id: '/check-in'
+      path: '/check-in'
+      fullPath: '/check-in'
+      preLoaderRoute: typeof CheckInRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/gallery': {
@@ -208,6 +228,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   BookRoute: BookRoute,
+  CheckInRoute: CheckInRoute,
   GalleryRoute: GalleryRoute,
   ManagerRoute: ManagerRouteWithChildren,
   ServicesRoute: ServicesRoute,
