@@ -379,16 +379,8 @@ export function ScheduleBoard({
     container.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
   }, [nowMinutes]);
 
-  // Keep upcoming unassigned cards from sliding under the live waiting queue.
-  useEffect(() => {
-    const node = queueRef.current;
-    if (!node || typeof ResizeObserver === "undefined") return;
-    const measure = () => setQueueHeight(node.offsetHeight);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  });
+
+
 
   useEffect(() => {
     registerScrollToNow?.(nowVisible ? scrollToNow : null);
