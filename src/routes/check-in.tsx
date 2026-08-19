@@ -1,28 +1,28 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowLeft, Check, Clock, Sparkles, UserRound } from "lucide-react";
+import { ArrowLeft, Check, Clock, Footprints, MapPin, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { salon } from "@/data/salon";
-import { getService } from "@/data/services";
+import { cn } from "@/lib/utils";
+import { salon, technicians } from "@/data/salon";
 import {
   technicianBlockouts,
   todayAppointments,
   type Appointment,
 } from "@/data/manager-mock";
 import { buildBlocks, isQueued } from "@/data/schedule";
+import { addCheckIn, useCheckIns, walkInAppointments } from "@/data/check-in-store";
 import {
-  addCheckIn,
-  useCheckIns,
-  walkInAppointments,
-} from "@/data/check-in-store";
-import {
-  checkInOutcome,
-  findMatches,
+  estimateWait,
+  findByNameAndTime,
+  findByPhone,
+  formatPhone,
+  parseApproxTime,
+  phoneReady,
   walkInMinutes,
-  type CheckInOutcome,
   type MatchedAppointment,
+  type WaitEstimate,
 } from "@/data/check-in";
 
 export const Route = createFileRoute("/check-in")({
@@ -32,7 +32,7 @@ export const Route = createFileRoute("/check-in")({
       {
         name: "description",
         content:
-          "Arrived at Mojito Nail Salon? Check in with your name and phone number and we'll let your technician know you're here.",
+          "Arrived at Mojito Nail Salon? Enter your phone number to check in and we'll let your technician know you're here.",
       },
       { name: "robots", content: "noindex" },
       { property: "og:title", content: "Check In — Mojito Nail Salon" },
@@ -46,13 +46,15 @@ export const Route = createFileRoute("/check-in")({
 });
 
 type Step =
-  | "welcome"
+  | "phone"
   | "choose"
   | "confirm"
-  | "not-found"
-  | "retry"
-  | "retry-failed"
-  | "walk-in"
+  | "no-match"
+  | "find-appointment"
+  | "front-desk"
+  | "walk-in-details"
+  | "walk-in-services"
+  | "walk-in-tech"
   | "success";
 
 const QUICK_SERVICES: { id: string; label: string }[] = [
@@ -66,18 +68,25 @@ const QUICK_SERVICES: { id: string; label: string }[] = [
   { id: "unsure", label: "Other / Not Sure" },
 ];
 
-const RESET_MS = 13_000;
+/** Success screen clears itself; a half-finished flow clears itself too. */
+const SUCCESS_RESET_MS = 10_000;
+const IDLE_RESET_MS = 75_000;
+
+type Success =
+  | { kind: "Appointment"; firstName: string; technicianLabel?: string; station?: number; wait: WaitEstimate }
+  | { kind: "Walk-In"; firstName: string; wait: WaitEstimate };
 
 function CheckInKiosk() {
   const records = useCheckIns();
-  const [step, setStep] = useState<Step>("welcome");
-  const [name, setName] = useState("");
+  const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
+  const [name, setName] = useState("");
   const [approxTime, setApproxTime] = useState("");
   const [matches, setMatches] = useState<MatchedAppointment[]>([]);
   const [selected, setSelected] = useState<MatchedAppointment | null>(null);
   const [serviceIds, setServiceIds] = useState<string[]>([]);
-  const [outcome, setOutcome] = useState<CheckInOutcome | null>(null);
+  const [preferredTech, setPreferredTech] = useState<string>("any");
+  const [success, setSuccess] = useState<Success | null>(null);
   const [nowMinutes, setNowMinutes] = useState<number | null>(null);
 
   useEffect(() => {
@@ -102,26 +111,36 @@ function CheckInKiosk() {
       .length;
   }, [appointments, nowMinutes]);
 
-  function reset() {
-    setStep("welcome");
-    setName("");
+  const reset = useCallback(() => {
+    setStep("phone");
     setPhone("");
+    setName("");
     setApproxTime("");
     setMatches([]);
     setSelected(null);
     setServiceIds([]);
-    setOutcome(null);
-  }
+    setPreferredTech("any");
+    setSuccess(null);
+  }, []);
 
-  // Privacy: the tablet is shared, so a success screen always clears itself.
+  // Privacy: the tablet is shared, so success always clears itself.
   useEffect(() => {
     if (step !== "success") return;
-    const id = window.setTimeout(reset, RESET_MS);
+    const id = window.setTimeout(reset, SUCCESS_RESET_MS);
     return () => window.clearTimeout(id);
-  }, [step]);
+  }, [step, reset]);
 
-  function search(approx?: number) {
-    const found = findMatches(appointments, name, phone, records, approx);
+  // Privacy: an abandoned half-finished flow clears itself too.
+  const idleRef = useRef(0);
+  useEffect(() => {
+    if (step === "phone") return;
+    window.clearTimeout(idleRef.current);
+    idleRef.current = window.setTimeout(reset, IDLE_RESET_MS);
+    return () => window.clearTimeout(idleRef.current);
+  }, [step, phone, name, approxTime, serviceIds, preferredTech, reset]);
+
+  function lookupByPhone() {
+    const found = findByPhone(appointments, phone, records);
     setMatches(found);
     if (found.length === 1) {
       setSelected(found[0]!);
@@ -129,35 +148,52 @@ function CheckInKiosk() {
     } else if (found.length > 1) {
       setStep("choose");
     } else {
-      setStep(step === "retry" ? "retry-failed" : "not-found");
+      setStep("no-match");
     }
   }
 
-  function confirmAppointment(match: MatchedAppointment) {
+  function lookupByName() {
+    const found = findByNameAndTime(appointments, name, parseApproxTime(approxTime), records);
+    if (found.length === 1) {
+      setSelected(found[0]!);
+      setStep("confirm");
+    } else if (found.length > 1) {
+      setMatches(found);
+      setStep("choose");
+    } else {
+      setStep("front-desk");
+    }
+  }
+
+  function checkInAppointment(match: MatchedAppointment) {
     const now = nowMinutes ?? match.appointment.minutes;
     addCheckIn({
       kind: "Appointment",
-      name: name.trim() || match.guest.name,
+      name: match.guest.name,
       phone: phone.trim(),
       atMinutes: now,
       appointmentId: match.appointment.id,
       guestId: match.guest.id,
     });
-    setOutcome(
-      checkInOutcome({
+    const requested = match.guest.requestedTechnicianId ?? match.guest.technicianId;
+    setSuccess({
+      kind: "Appointment",
+      firstName: match.guest.name.split(" ")[0] ?? "there",
+      ...(match.technicianLabel ? { technicianLabel: match.technicianLabel } : {}),
+      ...(match.station ? { station: match.station } : {}),
+      wait: estimateWait({
         appointments,
         blockouts: technicianBlockouts,
         now,
-        technicianId: match.guest.technicianId,
+        ...(requested && requested !== "any" ? { technicianId: requested } : {}),
         scheduledMinutes: match.appointment.minutes,
         queueAhead,
       }),
-    );
-    setSelected(match);
+    });
     setStep("success");
   }
 
-  function confirmWalkIn() {
+  function checkInWalkIn() {
     const now = nowMinutes ?? 9 * 60;
     const chosen = serviceIds.filter((id) => id !== "unsure");
     addCheckIn({
@@ -166,20 +202,23 @@ function CheckInKiosk() {
       phone: phone.trim(),
       atMinutes: now,
       serviceIds: chosen,
+      ...(preferredTech !== "any" ? { preferredTechnicianId: preferredTech } : {}),
     });
-    setOutcome(
-      checkInOutcome({
+    setSuccess({
+      kind: "Walk-In",
+      firstName: name.trim().split(" ")[0] ?? "there",
+      wait: estimateWait({
         appointments,
         blockouts: technicianBlockouts,
         now,
-        serviceMinutes: walkInMinutes(chosen),
         queueAhead,
+        serviceMinutes: walkInMinutes(chosen),
       }),
-    );
+    });
     setStep("success");
   }
 
-  const canSubmit = name.trim().length >= 2 && phone.replace(/\D/g, "").length >= 7;
+  const namedTechs = technicians.filter((technician) => technician.id !== "any");
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -189,52 +228,55 @@ function CheckInKiosk() {
         </p>
       </header>
 
-      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 py-8">
-        {step === "welcome" && (
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-8">
+        {step === "phone" && (
           <section className="text-center">
             <h1 className="text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl">
               Welcome!
             </h1>
             <p className="mt-3 text-lg text-muted-foreground sm:text-xl">
-              Please check in below.
+              Please enter your phone number to check in.
             </p>
 
-            <div className="mt-10 space-y-6 text-left">
-              <Field
-                id="kiosk-name"
-                label="Full Name"
-                value={name}
-                onChange={setName}
-                placeholder="Your name"
-                autoComplete="off"
-              />
-              <Field
+            <div className="mx-auto mt-10 max-w-xl text-left">
+              <Label
+                htmlFor="kiosk-phone"
+                className="text-base font-bold uppercase tracking-wide text-muted-foreground"
+              >
+                Phone Number
+              </Label>
+              <Input
                 id="kiosk-phone"
-                label="Phone Number"
-                value={phone}
-                onChange={setPhone}
-                placeholder="(512) 555-0184"
                 type="tel"
+                inputMode="numeric"
+                autoComplete="off"
+                value={phone}
+                onChange={(event) => setPhone(formatPhone(event.target.value))}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && phoneReady(phone)) lookupByPhone();
+                }}
+                placeholder="(512) 555-0184"
+                className="mt-3 h-20 rounded-2xl text-center text-3xl font-extrabold tracking-wider"
               />
             </div>
 
             <Button
-              className="mt-10 h-16 w-full rounded-2xl text-xl font-extrabold"
-              disabled={!canSubmit}
-              onClick={() => search()}
+              className="mx-auto mt-10 h-16 w-full max-w-xl rounded-2xl text-xl font-extrabold"
+              disabled={!phoneReady(phone)}
+              onClick={lookupByPhone}
             >
-              Check In
+              Continue
             </Button>
             <p className="mt-4 text-sm text-muted-foreground">
-              Name and phone only — nothing else is stored on this tablet.
+              Your number is used only to find today's appointment.
             </p>
           </section>
         )}
 
         {step === "choose" && (
           <section>
-            <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-              Which appointment is yours?
+            <h1 className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl">
+              Who is checking in?
             </h1>
             <div className="mt-8 space-y-4">
               {matches.map((match) => (
@@ -245,12 +287,11 @@ function CheckInKiosk() {
                     setSelected(match);
                     setStep("confirm");
                   }}
-                  className="w-full rounded-2xl border border-border bg-card p-6 text-left transition-colors hover:bg-secondary"
+                  className="w-full rounded-3xl border border-border bg-card p-6 text-left transition-colors hover:bg-secondary"
                 >
-                  <p className="text-2xl font-extrabold">{match.timeLabel}</p>
-                  <p className="mt-1 text-lg text-foreground">{match.serviceLabel}</p>
-                  <p className="mt-1 text-base text-muted-foreground">
-                    {match.technicianLabel ?? "Any available technician"}
+                  <p className="text-2xl font-extrabold text-foreground">{match.guest.name}</p>
+                  <p className="mt-1 text-lg text-muted-foreground">
+                    {match.timeLabel} · {match.serviceLabel}
                   </p>
                 </button>
               ))}
@@ -262,48 +303,50 @@ function CheckInKiosk() {
         {step === "confirm" && selected && (
           <section className="text-center">
             <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-              Welcome, {(name.trim() || selected.guest.name).split(" ")[0]}!
+              Hi {selected.guest.name.split(" ")[0]}!
             </h1>
             <p className="mt-3 text-lg text-muted-foreground">We found your appointment:</p>
 
-            <div className="mt-8 rounded-3xl border border-border bg-card p-8">
-              <p className="text-4xl font-extrabold text-foreground">{selected.timeLabel}</p>
-              <p className="mt-2 text-xl text-foreground">{selected.serviceLabel}</p>
-              <p className="mt-1 text-lg text-muted-foreground">
-                {selected.technicianLabel ?? "Any available technician"}
+            <div className="mx-auto mt-8 max-w-xl rounded-3xl border border-border bg-card p-8">
+              <p className="text-5xl font-extrabold text-foreground">{selected.timeLabel}</p>
+              <p className="mt-3 text-2xl font-bold text-foreground">{selected.serviceLabel}</p>
+              <p className="mt-2 text-lg text-muted-foreground">
+                {selected.technicianLabel
+                  ? `with ${selected.technicianLabel}`
+                  : "Any Available Technician"}
               </p>
             </div>
 
             <Button
-              className="mt-10 h-16 w-full rounded-2xl text-xl font-extrabold"
-              onClick={() => confirmAppointment(selected)}
+              className="mx-auto mt-10 h-16 w-full max-w-xl rounded-2xl text-xl font-extrabold"
+              onClick={() => checkInAppointment(selected)}
             >
-              Check In for This Appointment
+              Check In
             </Button>
             <BackButton onClick={reset} label="Not me — start over" />
           </section>
         )}
 
-        {step === "not-found" && (
+        {step === "no-match" && (
           <section className="text-center">
             <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-              We couldn't find an appointment for today.
+              We couldn't find an appointment for this phone number.
             </h1>
             <p className="mt-3 text-lg text-muted-foreground">Choose one:</p>
             <div className="mt-10 grid gap-4 sm:grid-cols-2">
               <Button
-                variant="outline"
-                className="h-24 rounded-2xl text-lg font-extrabold"
-                onClick={() => setStep("retry")}
+                className="h-24 rounded-2xl text-xl font-extrabold"
+                onClick={() => setStep("find-appointment")}
               >
-                <UserRound className="size-6" aria-hidden />
+                <Sparkles className="mr-2 size-6" aria-hidden />
                 I Have an Appointment
               </Button>
               <Button
-                className="h-24 rounded-2xl text-lg font-extrabold"
-                onClick={() => setStep("walk-in")}
+                variant="outline"
+                className="h-24 rounded-2xl border-2 text-xl font-extrabold"
+                onClick={() => setStep("walk-in-details")}
               >
-                <Sparkles className="size-6" aria-hidden />
+                <Footprints className="mr-2 size-6" aria-hidden />
                 I'm a Walk-In
               </Button>
             </div>
@@ -311,60 +354,50 @@ function CheckInKiosk() {
           </section>
         )}
 
-        {step === "retry" && (
+        {step === "find-appointment" && (
           <section>
-            <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-              Let's try again
+            <h1 className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl">
+              Let's find your appointment
             </h1>
-            <p className="mt-3 text-lg text-muted-foreground">
-              Your appointment may be under a different name or number.
-            </p>
-            <div className="mt-8 space-y-6">
+            <div className="mx-auto mt-10 max-w-xl space-y-6">
+              <Field id="find-name" label="Name" value={name} onChange={setName} placeholder="Your name" />
               <Field
-                id="retry-name"
-                label="Booking Name"
-                value={name}
-                onChange={setName}
-                placeholder="Name on the booking"
+                id="find-time"
+                label="Approximate Appointment Time"
+                value={approxTime}
+                onChange={setApproxTime}
+                placeholder="2:00 PM"
               />
               <Field
-                id="retry-phone"
+                id="find-phone"
                 label="Phone Number"
                 value={phone}
-                onChange={setPhone}
+                onChange={(value) => setPhone(formatPhone(value))}
                 placeholder="(512) 555-0184"
                 type="tel"
               />
-              <Field
-                id="retry-time"
-                label="Approximate Appointment Time (optional)"
-                value={approxTime}
-                onChange={setApproxTime}
-                placeholder="e.g. 2:00 PM"
-              />
+              <Button
+                className="h-16 w-full rounded-2xl text-xl font-extrabold"
+                disabled={name.trim().length < 2}
+                onClick={lookupByName}
+              >
+                Find My Appointment
+              </Button>
             </div>
-            <Button
-              className="mt-10 h-16 w-full rounded-2xl text-xl font-extrabold"
-              disabled={!canSubmit}
-              onClick={() => search(parseApproxTime(approxTime))}
-            >
-              Find My Appointment
-            </Button>
             <BackButton onClick={reset} label="Start over" />
           </section>
         )}
 
-        {step === "retry-failed" && (
+        {step === "front-desk" && (
           <section className="text-center">
             <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
               We couldn't locate your appointment.
             </h1>
-            <p className="mt-4 text-lg text-muted-foreground">
+            <p className="mt-4 text-xl text-muted-foreground">
               Please see the front desk for help.
             </p>
             <Button
-              variant="outline"
-              className="mt-10 h-14 w-full rounded-2xl text-lg font-extrabold"
+              className="mx-auto mt-10 h-16 w-full max-w-xl rounded-2xl text-xl font-extrabold"
               onClick={reset}
             >
               Done
@@ -372,53 +405,128 @@ function CheckInKiosk() {
           </section>
         )}
 
-        {step === "walk-in" && (
+        {step === "walk-in-details" && (
           <section>
-            <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-              What service are you interested in?
+            <h1 className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl">
+              Welcome in!
             </h1>
-            <p className="mt-3 text-lg text-muted-foreground">Tap all that apply.</p>
-            <div className="mt-8 grid gap-4 sm:grid-cols-2">
-              {QUICK_SERVICES.map((option) => {
-                const active = serviceIds.includes(option.id);
-                const service = getService(option.id);
+            <div className="mx-auto mt-10 max-w-xl space-y-6">
+              <Field
+                id="walk-name"
+                label="First Name"
+                value={name}
+                onChange={setName}
+                placeholder="Your first name"
+              />
+              <Field
+                id="walk-phone"
+                label="Phone Number"
+                value={phone}
+                onChange={(value) => setPhone(formatPhone(value))}
+                placeholder="(512) 555-0184"
+                type="tel"
+              />
+              <Button
+                className="h-16 w-full rounded-2xl text-xl font-extrabold"
+                disabled={name.trim().length < 2 || !phoneReady(phone)}
+                onClick={() => setStep("walk-in-services")}
+              >
+                Continue
+              </Button>
+            </div>
+            <BackButton onClick={reset} label="Start over" />
+          </section>
+        )}
+
+        {step === "walk-in-services" && (
+          <section>
+            <h1 className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl">
+              What would you like today?
+            </h1>
+            <p className="mt-3 text-center text-lg text-muted-foreground">
+              Tap everything you'd like — you can pick more than one.
+            </p>
+            <div className="mt-8 grid gap-3 sm:grid-cols-2">
+              {QUICK_SERVICES.map((service) => {
+                const active = serviceIds.includes(service.id);
                 return (
                   <button
-                    key={option.id}
+                    key={service.id}
                     type="button"
-                    aria-pressed={active}
                     onClick={() =>
                       setServiceIds((current) =>
-                        current.includes(option.id)
-                          ? current.filter((id) => id !== option.id)
-                          : [...current, option.id],
+                        current.includes(service.id)
+                          ? current.filter((id) => id !== service.id)
+                          : [...current, service.id],
                       )
                     }
-                    className={`flex min-h-24 flex-col justify-center rounded-2xl border p-5 text-left transition-colors ${
+                    className={cn(
+                      "flex h-20 items-center justify-between rounded-2xl border-2 px-6 text-left text-xl font-extrabold transition-colors",
                       active
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-card text-foreground hover:bg-secondary"
-                    }`}
-                  >
-                    <span className="flex items-center gap-2 text-lg font-extrabold">
-                      {active && <Check className="size-5" aria-hidden />}
-                      {option.label}
-                    </span>
-                    {service && (
-                      <span
-                        className={`mt-1 text-sm ${active ? "text-primary-foreground/80" : "text-muted-foreground"}`}
-                      >
-                        From ${service.price}
-                      </span>
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border bg-card text-foreground hover:bg-secondary",
                     )}
+                  >
+                    {service.label}
+                    {active && <Check className="size-6 text-primary" aria-hidden />}
                   </button>
                 );
               })}
             </div>
             <Button
-              className="mt-10 h-16 w-full rounded-2xl text-xl font-extrabold"
+              className="mx-auto mt-10 h-16 w-full max-w-xl rounded-2xl text-xl font-extrabold"
               disabled={serviceIds.length === 0}
-              onClick={confirmWalkIn}
+              onClick={() => setStep("walk-in-tech")}
+            >
+              Continue
+            </Button>
+            <BackButton onClick={reset} label="Start over" />
+          </section>
+        )}
+
+        {step === "walk-in-tech" && (
+          <section>
+            <h1 className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl">
+              Do you have a preferred technician?
+            </h1>
+            <div className="mx-auto mt-8 max-w-xl space-y-3">
+              <button
+                type="button"
+                onClick={() => setPreferredTech("any")}
+                className={cn(
+                  "flex h-20 w-full items-center justify-between rounded-2xl border-2 px-6 text-xl font-extrabold transition-colors",
+                  preferredTech === "any"
+                    ? "border-primary bg-primary/10"
+                    : "border-border bg-card hover:bg-secondary",
+                )}
+              >
+                Any Available Technician
+                {preferredTech === "any" && <Check className="size-6 text-primary" aria-hidden />}
+              </button>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {namedTechs.map((technician) => (
+                  <button
+                    key={technician.id}
+                    type="button"
+                    onClick={() => setPreferredTech(technician.id)}
+                    className={cn(
+                      "flex h-20 items-center justify-between rounded-2xl border-2 px-6 text-xl font-extrabold transition-colors",
+                      preferredTech === technician.id
+                        ? "border-primary bg-primary/10"
+                        : "border-border bg-card hover:bg-secondary",
+                    )}
+                  >
+                    {technician.name}
+                    {preferredTech === technician.id && (
+                      <Check className="size-6 text-primary" aria-hidden />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Button
+              className="mx-auto mt-10 h-16 w-full max-w-xl rounded-2xl text-xl font-extrabold"
+              onClick={checkInWalkIn}
             >
               Check In
             </Button>
@@ -426,59 +534,63 @@ function CheckInKiosk() {
           </section>
         )}
 
-        {step === "success" && outcome && (
+        {step === "success" && success && (
           <section className="text-center">
-            {outcome.ready ? (
-              <>
-                <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">
-                  You're all set!
-                </h1>
-                <p className="mt-6 text-lg text-muted-foreground">Please go to:</p>
-                <p className="mt-2 text-7xl font-extrabold tracking-tight text-primary sm:text-8xl">
-                  Station {outcome.station}
+            <div className="mx-auto flex size-20 items-center justify-center rounded-full bg-primary/15">
+              <Check className="size-10 text-primary" aria-hidden />
+            </div>
+            <h1 className="mt-6 text-4xl font-extrabold tracking-tight sm:text-5xl">
+              You're checked in!
+            </h1>
+
+            {success.kind === "Appointment" && success.technicianLabel ? (
+              <div className="mx-auto mt-8 max-w-xl rounded-3xl border border-border bg-card p-8">
+                <p className="text-sm font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
+                  Your technician
                 </p>
-                <p className="mt-6 text-xl text-foreground">
-                  {outcome.technicianLabel} will be with you shortly.
+                <p className="mt-2 text-3xl font-extrabold text-foreground">
+                  {success.technicianLabel}
                 </p>
-              </>
-            ) : (
-              <>
-                <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">
-                  You're checked in!
-                </h1>
-                {outcome.technicianLabel && (
-                  <p className="mt-4 text-lg text-foreground">
-                    {outcome.technicianLabel} is finishing with another guest.
+                {success.station !== undefined && (
+                  <p className="mt-3 flex items-center justify-center gap-2 text-lg font-bold text-muted-foreground">
+                    <MapPin className="size-5" aria-hidden />
+                    Station {success.station}
                   </p>
                 )}
-                <p className="mt-8 text-base font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                <p className="mt-5 text-xl text-foreground">
+                  Please have a seat. {success.technicianLabel} will call you shortly.
+                </p>
+              </div>
+            ) : (
+              <div className="mx-auto mt-8 max-w-xl rounded-3xl border border-border bg-card p-8">
+                <p className="text-sm font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
                   Estimated wait
                 </p>
-                <p className="mt-2 flex items-center justify-center gap-3 text-4xl font-extrabold text-primary sm:text-5xl">
-                  <Clock className="size-8" aria-hidden />
-                  {outcome.waitLabel}
+                <p className="mt-2 flex items-center justify-center gap-2 text-3xl font-extrabold text-foreground">
+                  <Clock className="size-7 text-primary" aria-hidden />
+                  {success.wait.label}
                 </p>
-                <p className="mt-8 text-xl text-foreground">
-                  Please have a seat. We'll call you shortly.
+                <p className="mt-5 text-xl text-foreground">
+                  Please have a seat.{" "}
+                  {success.kind === "Walk-In"
+                    ? "We'll call you when a technician is ready."
+                    : "A team member will call you shortly."}
                 </p>
-              </>
+              </div>
             )}
+
             <Button
-              variant="outline"
-              className="mt-12 h-14 w-full rounded-2xl text-lg font-extrabold"
+              className="mx-auto mt-10 h-16 w-full max-w-xl rounded-2xl text-xl font-extrabold"
               onClick={reset}
             >
               Done
             </Button>
-            <p className="mt-4 text-sm text-muted-foreground">
-              This screen clears itself in a few seconds.
-            </p>
           </section>
         )}
       </main>
 
-      <footer className="px-6 pb-8 text-center text-sm text-muted-foreground">
-        Need help? Our front desk is happy to assist.
+      <footer className="px-6 pb-10 text-center text-sm text-muted-foreground">
+        Need help? Our front desk team is happy to assist.
       </footer>
     </div>
   );
@@ -491,7 +603,6 @@ function Field({
   onChange,
   placeholder,
   type = "text",
-  autoComplete = "off",
 }: {
   id: string;
   label: string;
@@ -499,21 +610,20 @@ function Field({
   onChange: (value: string) => void;
   placeholder?: string;
   type?: string;
-  autoComplete?: string;
 }) {
   return (
     <div>
-      <Label htmlFor={id} className="text-base font-bold text-foreground">
+      <Label htmlFor={id} className="text-base font-bold uppercase tracking-wide text-muted-foreground">
         {label}
       </Label>
       <Input
         id={id}
         type={type}
+        autoComplete="off"
         value={value}
-        autoComplete={autoComplete}
-        placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-2 h-16 rounded-2xl bg-card px-5 text-xl"
+        placeholder={placeholder}
+        className="mt-3 h-16 rounded-2xl text-xl font-bold"
       />
     </div>
   );
@@ -530,19 +640,4 @@ function BackButton({ onClick, label }: { onClick: () => void; label: string }) 
       {label}
     </button>
   );
-}
-
-/** "2", "2 pm", "14:30" → minutes from midnight. */
-function parseApproxTime(value: string): number | undefined {
-  const text = value.trim().toLowerCase();
-  if (!text) return undefined;
-  const match = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/.exec(text);
-  if (!match) return undefined;
-  let hour = Number(match[1]);
-  const minute = Number(match[2] ?? 0);
-  const suffix = match[3];
-  if (suffix === "pm" && hour < 12) hour += 12;
-  if (suffix === "am" && hour === 12) hour = 0;
-  if (!suffix && hour < 8) hour += 12;
-  return hour * 60 + minute;
 }
