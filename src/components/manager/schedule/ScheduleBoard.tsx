@@ -193,7 +193,7 @@ function BlockCard({
           <>
             <Footprints className="size-3 shrink-0" aria-hidden />
             <span className="truncate">
-              Walk-In
+              {inQueue ? `Checked in ${formatShortMinutes(block.anchor)}` : "Walk-In"}
             </span>
           </>
         ) : (
@@ -224,11 +224,6 @@ function BlockCard({
       </span>
       {!compact && (
         <span className="truncate text-[11px] leading-tight opacity-85">{block.serviceLabel}</span>
-      )}
-      {isWalkIn && inQueue && (
-        <span className="truncate text-[10px] font-bold opacity-85">
-          Checked in {formatShortMinutes(block.anchor)}
-        </span>
       )}
       <span className="mt-auto flex flex-wrap items-center gap-x-1 text-[10px] font-bold">
         <StateIcon className="size-3 shrink-0" aria-hidden />
