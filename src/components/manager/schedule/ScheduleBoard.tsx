@@ -624,16 +624,23 @@ export function ScheduleBoard({
                 <div
                   key={minute}
                   className={cn(
-                    "relative border-b",
-                    minute % 60 === 0 ? "border-border" : "border-transparent",
+                    "relative border-t",
+                    minute % 60 === 0 ? "border-border" : "border-border/30",
                   )}
-                  style={{ height: SLOT_HEIGHT }}
+                  style={{
+                    height: SLOT_HEIGHT,
+                    ...(minute % 60 === 0 ? { borderTopWidth: 2 } : {}),
+                  }}
                 >
-                  {minute % 60 === 0 && (
+                  {minute % 60 === 0 ? (
                     <span className="absolute top-0.5 right-2 text-[11px] font-extrabold text-muted-foreground">
                       {formatShortMinutes(minute)}
                     </span>
-                  )}
+                  ) : minute % 60 === 30 ? (
+                    <span className="absolute top-0 right-2 text-[9px] font-bold text-muted-foreground/55">
+                      :30
+                    </span>
+                  ) : null}
                 </div>
               ))}
               {nowVisible && (
@@ -653,6 +660,7 @@ export function ScheduleBoard({
               className="relative border-r border-border bg-status-warn-bg/20"
               style={{ height: totalHeight }}
             >
+              <TimeGrid ticks={ticks} />
               {/* Every queued card sits on its own logical time: appointment
                   scheduled time, walk-in check-in time. No list stacking. */}
               {queued.map((block) => {
