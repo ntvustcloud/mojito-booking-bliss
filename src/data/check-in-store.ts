@@ -27,6 +27,15 @@ export type CheckInRecord = {
   serviceIds?: string[];
   /** Walk-in preference only — never an assignment. */
   preferredTechnicianId?: string;
+  /** Receptionist still has to help pick the service ("Other / Not Sure"). */
+  serviceNeedsClarification?: boolean;
+  /**
+   * Same-day return visit: the customer did not want to wait, so this arrival
+   * becomes a booking at this time instead of a Waiting Now card.
+   */
+  returnAtMinutes?: number;
+  /** Group arrival: the receptionist checks the party in personally. */
+  groupArrival?: boolean;
 };
 
 const STORAGE_KEY = "mojito.checkins.v1";
