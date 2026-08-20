@@ -27,6 +27,15 @@ export type CheckInRecord = {
   serviceIds?: string[];
   /** Walk-in preference only — never an assignment. */
   preferredTechnicianId?: string;
+  /** Receptionist still has to help pick the service ("Other / Not Sure"). */
+  serviceNeedsClarification?: boolean;
+  /**
+   * Same-day return visit: the customer did not want to wait, so this arrival
+   * becomes a booking at this time instead of a Waiting Now card.
+   */
+  returnAtMinutes?: number;
+  /** Group arrival: the receptionist checks the party in personally. */
+  groupArrival?: boolean;
 };
 
 const STORAGE_KEY = "mojito.checkins.v1";
@@ -90,36 +99,54 @@ export function useCheckIns(): CheckInRecord[] {
   return records;
 }
 
-/** Walk-in arrivals as real bookings anchored to their check-in time. */
+/**
+ * Walk-in arrivals as real bookings.
+ *
+ * A customer who chose to wait is anchored to their check-in time and reads as
+ * a Walk-In. A customer who chose "Come back later" keeps their name, phone and
+ * services but becomes an unassigned booking at the agreed return time — the
+ * board must not treat them as physically waiting.
+ */
 export function walkInAppointments(records: CheckInRecord[]): Appointment[] {
   return records
     .filter((record) => record.kind === "Walk-In")
-    .map((record) => ({
-      id: `apt-${record.id}`,
-      time: formatClock(record.atMinutes),
-      minutes: record.atMinutes,
-      title: record.name,
-      primaryContact: record.name,
-      phone: record.phone,
-      source: "Walk-In" as const,
-      notes: record.preferredTechnicianId
-        ? "Self check-in at the front tablet. Prefers a specific technician."
-        : "Self check-in at the front tablet.",
-      guests: [
-        {
-          id: `${record.id}-g`,
-          name: record.name,
-          serviceIds: record.serviceIds ?? [],
-          // Never auto-assigned: preference only, the manager decides.
-          technicianId: "any",
-          ...(record.preferredTechnicianId
-            ? { requestedTechnicianId: record.preferredTechnicianId }
-            : {}),
-          status: "Scheduled" as const,
-          arrivedAtMinutes: record.atMinutes,
-        },
-      ],
-    }));
+    .map((record) => {
+      const returning = record.returnAtMinutes !== undefined;
+      const anchor = record.returnAtMinutes ?? record.atMinutes;
+      const notes = [
+        returning
+          ? `Return visit — arrived ${formatClock(record.atMinutes)} and chose to come back around ${formatClock(anchor)}.`
+          : "Self check-in at the front tablet.",
+        record.serviceNeedsClarification
+          ? "Service not chosen yet — help them pick at the front desk."
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      return {
+        id: `apt-${record.id}`,
+        time: formatClock(anchor),
+        minutes: anchor,
+        title: record.name,
+        primaryContact: record.name,
+        phone: record.phone,
+        source: returning ? ("Phone" as const) : ("Walk-In" as const),
+        notes,
+        guests: [
+          {
+            id: `${record.id}-g`,
+            name: record.name,
+            serviceIds: record.serviceIds ?? [],
+            // Never auto-assigned: the manager decides.
+            technicianId: "any",
+            status: "Scheduled" as const,
+            // Only present when the customer is actually in the salon now.
+            ...(returning ? {} : { arrivedAtMinutes: record.atMinutes }),
+          },
+        ],
+      };
+    });
 }
 
 /** `appointmentId:guestId` → arrival time, for booked guests who checked in. */

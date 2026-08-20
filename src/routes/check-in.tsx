@@ -1,29 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowLeft, Check, Clock, Footprints, MapPin, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, Clock, Footprints, MapPin, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { salon, technicians } from "@/data/salon";
-import {
-  technicianBlockouts,
-  todayAppointments,
-  type Appointment,
-} from "@/data/manager-mock";
+import { salon } from "@/data/salon";
+import { technicianBlockouts, todayAppointments, type Appointment } from "@/data/manager-mock";
 import { buildBlocks, isQueued } from "@/data/schedule";
 import { addCheckIn, useCheckIns, walkInAppointments } from "@/data/check-in-store";
 import {
-  estimateWait,
-  findByNameAndTime,
-  findByPhone,
+  formatClock,
   formatPhone,
-  parseApproxTime,
+  findByPhone,
+  groupArrival,
   phoneReady,
+  suggestReturnWindow,
+  waitOutcome,
   walkInMinutes,
+  type GroupArrival,
   type MatchedAppointment,
-  type WaitEstimate,
+  type WaitOutcome,
 } from "@/data/check-in";
+import {
+  needsClarification,
+  popularServiceOptions,
+  selectedServiceIds,
+} from "@/data/kiosk-popular-services";
 
 export const Route = createFileRoute("/check-in")({
   head: () => ({
@@ -47,47 +50,45 @@ export const Route = createFileRoute("/check-in")({
 
 type Step =
   | "phone"
-  | "choose"
   | "confirm"
   | "no-match"
-  | "find-appointment"
   | "front-desk"
-  | "walk-in-details"
+  | "group"
+  | "walk-in-name"
   | "walk-in-services"
-  | "walk-in-tech"
+  | "long-wait"
+  | "return-offer"
   | "success";
-
-const QUICK_SERVICES: { id: string; label: string }[] = [
-  { id: "classic-manicure", label: "Manicure" },
-  { id: "express-pedicure", label: "Basic Pedicure" },
-  { id: "signature-pedicure", label: "Spa Pedicure" },
-  { id: "deluxe-pedicure", label: "Deluxe Pedicure" },
-  { id: "acrylic-full-set", label: "Acrylic Full Set" },
-  { id: "acrylic-fill", label: "Acrylic Fill-In" },
-  { id: "gel-x-full-set", label: "Gel-X" },
-  { id: "unsure", label: "Other / Not Sure" },
-];
 
 /** Success screen clears itself; a half-finished flow clears itself too. */
 const SUCCESS_RESET_MS = 10_000;
 const IDLE_RESET_MS = 75_000;
 
 type Success =
-  | { kind: "Appointment"; firstName: string; technicianLabel?: string; station?: number; wait: WaitEstimate }
-  | { kind: "Walk-In"; firstName: string; wait: WaitEstimate };
+  | {
+      kind: "Appointment";
+      technicianLabel?: string;
+      station?: number;
+      wait?: string;
+    }
+  | { kind: "Walk-In"; wait?: string; longWait?: boolean }
+  | { kind: "Return"; returnLabel: string };
 
 function CheckInKiosk() {
   const records = useCheckIns();
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
-  const [approxTime, setApproxTime] = useState("");
   const [matches, setMatches] = useState<MatchedAppointment[]>([]);
   const [selected, setSelected] = useState<MatchedAppointment | null>(null);
-  const [serviceIds, setServiceIds] = useState<string[]>([]);
-  const [preferredTech, setPreferredTech] = useState<string>("any");
+  const [group, setGroup] = useState<GroupArrival | null>(null);
+  const [optionIds, setOptionIds] = useState<string[]>([]);
   const [success, setSuccess] = useState<Success | null>(null);
   const [nowMinutes, setNowMinutes] = useState<number | null>(null);
+  const [returnLabel, setReturnLabel] = useState("");
+  const [returnAt, setReturnAt] = useState<number | null>(null);
+  /** Set when the customer reached the long-wait fork from an any-tech booking. */
+  const [pendingAppointment, setPendingAppointment] = useState<MatchedAppointment | null>(null);
 
   useEffect(() => {
     const tick = () => {
@@ -99,7 +100,7 @@ function CheckInKiosk() {
     return () => window.clearInterval(id);
   }, []);
 
-  /** Same day the manager sees: seeded bookings + kiosk walk-ins. */
+  /** Same day the manager sees: seeded bookings + kiosk arrivals. */
   const appointments: Appointment[] = useMemo(
     () => [...todayAppointments, ...walkInAppointments(records)],
     [records],
@@ -115,12 +116,14 @@ function CheckInKiosk() {
     setStep("phone");
     setPhone("");
     setName("");
-    setApproxTime("");
     setMatches([]);
     setSelected(null);
-    setServiceIds([]);
-    setPreferredTech("any");
+    setGroup(null);
+    setOptionIds([]);
     setSuccess(null);
+    setReturnLabel("");
+    setReturnAt(null);
+    setPendingAppointment(null);
   }, []);
 
   // Privacy: the tablet is shared, so success always clears itself.
@@ -137,88 +140,168 @@ function CheckInKiosk() {
     window.clearTimeout(idleRef.current);
     idleRef.current = window.setTimeout(reset, IDLE_RESET_MS);
     return () => window.clearTimeout(idleRef.current);
-  }, [step, phone, name, approxTime, serviceIds, preferredTech, reset]);
+  }, [step, phone, name, optionIds, reset]);
+
+  const estimateBase = useMemo(
+    () => ({
+      appointments,
+      blockouts: technicianBlockouts,
+      now: nowMinutes ?? 9 * 60,
+      queueAhead,
+    }),
+    [appointments, nowMinutes, queueAhead],
+  );
 
   function lookupByPhone() {
     const found = findByPhone(appointments, phone, records);
     setMatches(found);
+
+    // Groups never self-check-in person by person — hand them to the front desk.
+    const party = groupArrival(found);
+    if (party) {
+      setGroup(party);
+      // Lightweight manager-side arrival signal on the existing booking only —
+      // no duplicate Waiting cards for the party.
+      for (const guest of party.appointment.guests) {
+        if (guest.status === "Cancelled") continue;
+        addCheckIn({
+          kind: "Appointment",
+          name: party.appointment.title,
+          phone: phone.trim(),
+          atMinutes: nowMinutes ?? party.appointment.minutes,
+          appointmentId: party.appointment.id,
+          guestId: guest.id,
+          groupArrival: true,
+        });
+      }
+      setStep("group");
+      return;
+    }
+
     if (found.length === 1) {
       setSelected(found[0]!);
       setStep("confirm");
     } else if (found.length > 1) {
-      setStep("choose");
+      // Several separate bookings on one number is not routine — send to a human.
+      setStep("front-desk");
     } else {
       setStep("no-match");
     }
   }
 
-  function lookupByName() {
-    const found = findByNameAndTime(appointments, name, parseApproxTime(approxTime), records);
-    if (found.length === 1) {
-      setSelected(found[0]!);
-      setStep("confirm");
-    } else if (found.length > 1) {
-      setMatches(found);
-      setStep("choose");
-    } else {
-      setStep("front-desk");
-    }
-  }
-
-  function checkInAppointment(match: MatchedAppointment) {
-    const now = nowMinutes ?? match.appointment.minutes;
+  function recordAppointment(match: MatchedAppointment, wait?: string) {
     addCheckIn({
       kind: "Appointment",
       name: match.guest.name,
       phone: phone.trim(),
-      atMinutes: now,
+      atMinutes: nowMinutes ?? match.appointment.minutes,
       appointmentId: match.appointment.id,
       guestId: match.guest.id,
     });
-    const requested = match.guest.requestedTechnicianId ?? match.guest.technicianId;
     setSuccess({
       kind: "Appointment",
-      firstName: match.guest.name.split(" ")[0] ?? "there",
       ...(match.technicianLabel ? { technicianLabel: match.technicianLabel } : {}),
       ...(match.station ? { station: match.station } : {}),
-      wait: estimateWait({
-        appointments,
-        blockouts: technicianBlockouts,
-        now,
-        ...(requested && requested !== "any" ? { technicianId: requested } : {}),
-        scheduledMinutes: match.appointment.minutes,
-        queueAhead,
-      }),
+      ...(wait ? { wait } : {}),
     });
     setStep("success");
   }
 
-  function checkInWalkIn() {
-    const now = nowMinutes ?? 9 * 60;
-    const chosen = serviceIds.filter((id) => id !== "unsure");
+  function checkInAppointment(match: MatchedAppointment) {
+    const requested = match.guest.requestedTechnicianId ?? match.guest.technicianId;
+    const hasTech = Boolean(requested && requested !== "any");
+
+    // A specific technician keeps the card in their column — check in and done.
+    if (hasTech) {
+      recordAppointment(match);
+      return;
+    }
+
+    const outcome = waitOutcome({
+      ...estimateBase,
+      scheduledMinutes: match.appointment.minutes,
+    });
+    if (outcome.kind === "long") {
+      setPendingAppointment(match);
+      setStep("long-wait");
+      return;
+    }
+    recordAppointment(match, outcome.label);
+  }
+
+  function walkInOutcome(): WaitOutcome {
+    return waitOutcome({
+      ...estimateBase,
+      serviceMinutes: walkInMinutes(selectedServiceIds(optionIds)),
+    });
+  }
+
+  function submitWalkInServices() {
+    const outcome = walkInOutcome();
+    if (outcome.kind === "long") {
+      setStep("long-wait");
+      return;
+    }
+    createWalkIn({ wait: outcome.label });
+  }
+
+  function createWalkIn({ wait, longWait }: { wait?: string; longWait?: boolean }) {
     addCheckIn({
       kind: "Walk-In",
       name: name.trim(),
       phone: phone.trim(),
-      atMinutes: now,
-      serviceIds: chosen,
-      ...(preferredTech !== "any" ? { preferredTechnicianId: preferredTech } : {}),
+      atMinutes: nowMinutes ?? 9 * 60,
+      serviceIds: selectedServiceIds(optionIds),
+      ...(needsClarification(optionIds) ? { serviceNeedsClarification: true } : {}),
     });
     setSuccess({
       kind: "Walk-In",
-      firstName: name.trim().split(" ")[0] ?? "there",
-      wait: estimateWait({
-        appointments,
-        blockouts: technicianBlockouts,
-        now,
-        queueAhead,
-        serviceMinutes: walkInMinutes(chosen),
-      }),
+      ...(wait ? { wait } : {}),
+      ...(longWait ? { longWait: true } : {}),
     });
     setStep("success");
   }
 
-  const namedTechs = technicians.filter((technician) => technician.id !== "any");
+  /** "Wait Here" — stay in the queue exactly as before, with no time promise. */
+  function waitHere() {
+    if (pendingAppointment) {
+      recordAppointment(pendingAppointment);
+      return;
+    }
+    createWalkIn({ longWait: true });
+  }
+
+  /** "Come back later" — offer a same-day return window instead of losing them. */
+  function offerReturn() {
+    const suggestion = suggestReturnWindow({
+      ...estimateBase,
+      serviceMinutes: walkInMinutes(selectedServiceIds(optionIds)),
+    });
+    setReturnAt(suggestion.minutes);
+    setReturnLabel(suggestion.label);
+    setStep("return-offer");
+  }
+
+  function confirmReturn() {
+    const at = returnAt ?? (nowMinutes ?? 9 * 60) + 45;
+    // A booked guest already has a booking on the board — never duplicate it.
+    // Only a walk-in becomes a same-day return visit.
+    if (!pendingAppointment) {
+      addCheckIn({
+        kind: "Walk-In",
+        name: name.trim() || "Guest",
+        phone: phone.trim(),
+        atMinutes: nowMinutes ?? 9 * 60,
+        serviceIds: selectedServiceIds(optionIds),
+        ...(needsClarification(optionIds) ? { serviceNeedsClarification: true } : {}),
+        returnAtMinutes: at,
+      });
+    }
+    setSuccess({ kind: "Return", returnLabel: formatClock(at) });
+    setStep("success");
+  }
+
+  const options = popularServiceOptions();
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -273,33 +356,6 @@ function CheckInKiosk() {
           </section>
         )}
 
-        {step === "choose" && (
-          <section>
-            <h1 className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl">
-              Who is checking in?
-            </h1>
-            <div className="mt-8 space-y-4">
-              {matches.map((match) => (
-                <button
-                  key={`${match.appointment.id}:${match.guest.id}`}
-                  type="button"
-                  onClick={() => {
-                    setSelected(match);
-                    setStep("confirm");
-                  }}
-                  className="w-full rounded-3xl border border-border bg-card p-6 text-left transition-colors hover:bg-secondary"
-                >
-                  <p className="text-2xl font-extrabold text-foreground">{match.guest.name}</p>
-                  <p className="mt-1 text-lg text-muted-foreground">
-                    {match.timeLabel} · {match.serviceLabel}
-                  </p>
-                </button>
-              ))}
-            </div>
-            <BackButton onClick={reset} label="Start over" />
-          </section>
-        )}
-
         {step === "confirm" && selected && (
           <section className="text-center">
             <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
@@ -327,6 +383,31 @@ function CheckInKiosk() {
           </section>
         )}
 
+        {step === "group" && group && (
+          <section className="text-center">
+            <div className="mx-auto flex size-20 items-center justify-center rounded-full bg-primary/15">
+              <Users className="size-10 text-primary" aria-hidden />
+            </div>
+            <h1 className="mt-6 text-4xl font-extrabold tracking-tight sm:text-5xl">Welcome!</h1>
+            <p className="mt-4 text-xl text-foreground">We found your group appointment.</p>
+            <div className="mx-auto mt-8 max-w-xl rounded-3xl border border-border bg-card p-8">
+              <p className="text-3xl font-extrabold text-foreground">
+                Party of {group.guestCount}
+              </p>
+              <p className="mt-2 text-2xl font-bold text-muted-foreground">{group.timeLabel}</p>
+              <p className="mt-5 text-xl text-foreground">
+                Please see our front desk and we'll help get everyone checked in.
+              </p>
+            </div>
+            <Button
+              className="mx-auto mt-10 h-16 w-full max-w-xl rounded-2xl text-xl font-extrabold"
+              onClick={reset}
+            >
+              Done
+            </Button>
+          </section>
+        )}
+
         {step === "no-match" && (
           <section className="text-center">
             <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
@@ -336,52 +417,17 @@ function CheckInKiosk() {
             <div className="mt-10 grid gap-4 sm:grid-cols-2">
               <Button
                 className="h-24 rounded-2xl text-xl font-extrabold"
-                onClick={() => setStep("find-appointment")}
-              >
-                <Sparkles className="mr-2 size-6" aria-hidden />
-                I Have an Appointment
-              </Button>
-              <Button
-                variant="outline"
-                className="h-24 rounded-2xl border-2 text-xl font-extrabold"
-                onClick={() => setStep("walk-in-details")}
+                onClick={() => setStep("walk-in-name")}
               >
                 <Footprints className="mr-2 size-6" aria-hidden />
                 I'm a Walk-In
               </Button>
-            </div>
-            <BackButton onClick={reset} label="Start over" />
-          </section>
-        )}
-
-        {step === "find-appointment" && (
-          <section>
-            <h1 className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl">
-              Let's find your appointment
-            </h1>
-            <div className="mx-auto mt-10 max-w-xl space-y-6">
-              <Field id="find-name" label="Name" value={name} onChange={setName} placeholder="Your name" />
-              <Field
-                id="find-time"
-                label="Approximate Appointment Time"
-                value={approxTime}
-                onChange={setApproxTime}
-                placeholder="2:00 PM"
-              />
-              <Field
-                id="find-phone"
-                label="Phone Number"
-                value={phone}
-                onChange={(value) => setPhone(formatPhone(value))}
-                placeholder="(512) 555-0184"
-                type="tel"
-              />
               <Button
-                className="h-16 w-full rounded-2xl text-xl font-extrabold"
-                disabled={name.trim().length < 2}
-                onClick={lookupByName}
+                variant="outline"
+                className="h-24 rounded-2xl border-2 text-xl font-extrabold"
+                onClick={() => setStep("front-desk")}
               >
-                Find My Appointment
+                I Have an Appointment
               </Button>
             </div>
             <BackButton onClick={reset} label="Start over" />
@@ -391,10 +437,10 @@ function CheckInKiosk() {
         {step === "front-desk" && (
           <section className="text-center">
             <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-              We couldn't locate your appointment.
+              Let's get you help.
             </h1>
             <p className="mt-4 text-xl text-muted-foreground">
-              Please see the front desk for help.
+              Please see the front desk and we'll check you in.
             </p>
             <Button
               className="mx-auto mt-10 h-16 w-full max-w-xl rounded-2xl text-xl font-extrabold"
@@ -405,7 +451,7 @@ function CheckInKiosk() {
           </section>
         )}
 
-        {step === "walk-in-details" && (
+        {step === "walk-in-name" && (
           <section>
             <h1 className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl">
               Welcome in!
@@ -418,17 +464,9 @@ function CheckInKiosk() {
                 onChange={setName}
                 placeholder="Your first name"
               />
-              <Field
-                id="walk-phone"
-                label="Phone Number"
-                value={phone}
-                onChange={(value) => setPhone(formatPhone(value))}
-                placeholder="(512) 555-0184"
-                type="tel"
-              />
               <Button
                 className="h-16 w-full rounded-2xl text-xl font-extrabold"
-                disabled={name.trim().length < 2 || !phoneReady(phone)}
+                disabled={name.trim().length < 2}
                 onClick={() => setStep("walk-in-services")}
               >
                 Continue
@@ -440,34 +478,37 @@ function CheckInKiosk() {
 
         {step === "walk-in-services" && (
           <section>
-            <h1 className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl">
+            <p className="text-center text-xs font-extrabold uppercase tracking-[0.3em] text-primary">
+              Popular Services
+            </p>
+            <h1 className="mt-3 text-center text-3xl font-extrabold tracking-tight sm:text-4xl">
               What would you like today?
             </h1>
             <p className="mt-3 text-center text-lg text-muted-foreground">
               Tap everything you'd like — you can pick more than one.
             </p>
             <div className="mt-8 grid gap-3 sm:grid-cols-2">
-              {QUICK_SERVICES.map((service) => {
-                const active = serviceIds.includes(service.id);
+              {options.map((option) => {
+                const active = optionIds.includes(option.id);
                 return (
                   <button
-                    key={service.id}
+                    key={option.id}
                     type="button"
                     onClick={() =>
-                      setServiceIds((current) =>
-                        current.includes(service.id)
-                          ? current.filter((id) => id !== service.id)
-                          : [...current, service.id],
+                      setOptionIds((current) =>
+                        current.includes(option.id)
+                          ? current.filter((id) => id !== option.id)
+                          : [...current, option.id],
                       )
                     }
                     className={cn(
-                      "flex h-20 items-center justify-between rounded-2xl border-2 px-6 text-left text-xl font-extrabold transition-colors",
+                      "flex h-24 items-center justify-between rounded-2xl border-2 px-6 text-left text-xl font-extrabold transition-colors",
                       active
-                        ? "border-primary bg-primary/10 text-foreground"
-                        : "border-border bg-card text-foreground hover:bg-secondary",
+                        ? "border-primary bg-primary/10"
+                        : "border-border bg-card hover:bg-secondary",
                     )}
                   >
-                    {service.label}
+                    {option.label}
                     {active && <Check className="size-6 text-primary" aria-hidden />}
                   </button>
                 );
@@ -475,62 +516,61 @@ function CheckInKiosk() {
             </div>
             <Button
               className="mx-auto mt-10 h-16 w-full max-w-xl rounded-2xl text-xl font-extrabold"
-              disabled={serviceIds.length === 0}
-              onClick={() => setStep("walk-in-tech")}
+              disabled={optionIds.length === 0}
+              onClick={submitWalkInServices}
             >
-              Continue
+              Check In
             </Button>
             <BackButton onClick={reset} label="Start over" />
           </section>
         )}
 
-        {step === "walk-in-tech" && (
-          <section>
-            <h1 className="text-center text-3xl font-extrabold tracking-tight sm:text-4xl">
-              Do you have a preferred technician?
+        {step === "long-wait" && (
+          <section className="text-center">
+            <div className="mx-auto flex size-20 items-center justify-center rounded-full bg-primary/15">
+              <Clock className="size-10 text-primary" aria-hidden />
+            </div>
+            <h1 className="mt-6 text-3xl font-extrabold tracking-tight sm:text-4xl">
+              There may be a longer wait right now.
             </h1>
-            <div className="mx-auto mt-8 max-w-xl space-y-3">
-              <button
-                type="button"
-                onClick={() => setPreferredTech("any")}
-                className={cn(
-                  "flex h-20 w-full items-center justify-between rounded-2xl border-2 px-6 text-xl font-extrabold transition-colors",
-                  preferredTech === "any"
-                    ? "border-primary bg-primary/10"
-                    : "border-border bg-card hover:bg-secondary",
-                )}
+            <p className="mt-4 text-xl text-muted-foreground">Would you like to:</p>
+            <div className="mt-10 grid gap-4 sm:grid-cols-2">
+              <Button className="h-24 rounded-2xl text-xl font-extrabold" onClick={waitHere}>
+                Wait Here
+              </Button>
+              <Button
+                variant="outline"
+                className="h-24 rounded-2xl border-2 text-xl font-extrabold"
+                onClick={offerReturn}
               >
-                Any Available Technician
-                {preferredTech === "any" && <Check className="size-6 text-primary" aria-hidden />}
-              </button>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {namedTechs.map((technician) => (
-                  <button
-                    key={technician.id}
-                    type="button"
-                    onClick={() => setPreferredTech(technician.id)}
-                    className={cn(
-                      "flex h-20 items-center justify-between rounded-2xl border-2 px-6 text-xl font-extrabold transition-colors",
-                      preferredTech === technician.id
-                        ? "border-primary bg-primary/10"
-                        : "border-border bg-card hover:bg-secondary",
-                    )}
-                  >
-                    {technician.name}
-                    {preferredTech === technician.id && (
-                      <Check className="size-6 text-primary" aria-hidden />
-                    )}
-                  </button>
-                ))}
-              </div>
+                Come Back Later
+              </Button>
+            </div>
+            <BackButton onClick={reset} label="Start over" />
+          </section>
+        )}
+
+        {step === "return-offer" && (
+          <section className="text-center">
+            <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
+              We can hold a spot for you.
+            </h1>
+            <div className="mx-auto mt-8 max-w-xl rounded-3xl border border-border bg-card p-8">
+              <p className="text-sm font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
+                Suggested return time
+              </p>
+              <p className="mt-2 text-4xl font-extrabold text-foreground">{returnLabel}</p>
+              <p className="mt-5 text-lg text-muted-foreground">
+                We'll keep your name, number and services — just check in again when you arrive.
+              </p>
             </div>
             <Button
               className="mx-auto mt-10 h-16 w-full max-w-xl rounded-2xl text-xl font-extrabold"
-              onClick={checkInWalkIn}
+              onClick={confirmReturn}
             >
-              Check In
+              Yes, I'll come back
             </Button>
-            <BackButton onClick={reset} label="Start over" />
+            <BackButton onClick={() => setStep("long-wait")} label="Back" />
           </section>
         )}
 
@@ -540,13 +580,28 @@ function CheckInKiosk() {
               <Check className="size-10 text-primary" aria-hidden />
             </div>
             <h1 className="mt-6 text-4xl font-extrabold tracking-tight sm:text-5xl">
-              You're checked in!
+              {success.kind === "Return" ? "You're all set!" : "You're checked in!"}
             </h1>
 
-            {success.kind === "Appointment" && success.technicianLabel ? (
+            {success.kind === "Return" ? (
               <div className="mx-auto mt-8 max-w-xl rounded-3xl border border-border bg-card p-8">
                 <p className="text-sm font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
-                  Your technician
+                  Please return around
+                </p>
+                <p className="mt-2 text-4xl font-extrabold text-foreground">
+                  {success.returnLabel}
+                </p>
+                <p className="mt-5 text-xl text-foreground">
+                  We'll keep your place for this return time. Please check in again when you arrive.
+                </p>
+                <p className="mt-3 text-base text-muted-foreground">
+                  A team member may contact you if availability changes.
+                </p>
+              </div>
+            ) : success.kind === "Appointment" && success.technicianLabel ? (
+              <div className="mx-auto mt-8 max-w-xl rounded-3xl border border-border bg-card p-8">
+                <p className="text-sm font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
+                  Your appointment is with
                 </p>
                 <p className="mt-2 text-3xl font-extrabold text-foreground">
                   {success.technicianLabel}
@@ -563,19 +618,29 @@ function CheckInKiosk() {
               </div>
             ) : (
               <div className="mx-auto mt-8 max-w-xl rounded-3xl border border-border bg-card p-8">
-                <p className="text-sm font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
-                  Estimated wait
-                </p>
-                <p className="mt-2 flex items-center justify-center gap-2 text-3xl font-extrabold text-foreground">
-                  <Clock className="size-7 text-primary" aria-hidden />
-                  {success.wait.label}
-                </p>
-                <p className="mt-5 text-xl text-foreground">
-                  Please have a seat.{" "}
-                  {success.kind === "Walk-In"
-                    ? "We'll call you when a technician is ready."
-                    : "A team member will call you shortly."}
-                </p>
+                {success.wait ? (
+                  <>
+                    <p className="text-sm font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
+                      Estimated wait
+                    </p>
+                    <p className="mt-2 flex items-center justify-center gap-2 text-3xl font-extrabold text-foreground">
+                      <Clock className="size-7 text-primary" aria-hidden />
+                      {success.wait}
+                    </p>
+                    <p className="mt-5 text-xl text-foreground">
+                      Please have a seat. We'll call you shortly.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xl text-foreground">
+                      There may be a longer wait than usual.
+                    </p>
+                    <p className="mt-3 text-xl text-foreground">
+                      Please have a seat. We'll call you as soon as a technician becomes available.
+                    </p>
+                  </>
+                )}
               </div>
             )}
 
