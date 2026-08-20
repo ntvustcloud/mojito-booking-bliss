@@ -265,12 +265,12 @@ function TimeGrid({ ticks }: { ticks: number[] }) {
         <div
           key={minute}
           className={cn(
-            "pointer-events-none border-b",
+            "pointer-events-none border-t",
             minute % 60 === 0 ? "border-border" : "border-border/30",
           )}
           style={{
             height: SLOT_HEIGHT,
-            ...(minute % 60 === 0 ? { borderBottomWidth: 2 } : {}),
+            ...(minute % 60 === 0 ? { borderTopWidth: 2 } : {}),
           }}
         />
       ))}
