@@ -241,11 +241,12 @@ export type GroupArrival = {
 };
 
 export function groupArrival(matches: MatchedAppointment[]): GroupArrival | undefined {
-  const first = matches[0];
-  if (!first) return undefined;
-  const live = first.appointment.guests.filter((guest) => guest.status !== "Cancelled");
-  const sameBooking = matches.filter((match) => match.appointment.id === first.appointment.id);
-  const guestCount = Math.max(live.length, sameBooking.length);
-  if (guestCount < 2) return undefined;
-  return { appointment: first.appointment, guestCount, timeLabel: first.appointment.time };
+  for (const match of matches) {
+    const live = match.appointment.guests.filter((guest) => guest.status !== "Cancelled");
+    const sameBooking = matches.filter((item) => item.appointment.id === match.appointment.id);
+    const guestCount = Math.max(live.length, sameBooking.length);
+    if (guestCount < 2) continue;
+    return { appointment: match.appointment, guestCount, timeLabel: match.appointment.time };
+  }
+  return undefined;
 }
