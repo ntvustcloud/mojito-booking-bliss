@@ -764,16 +764,7 @@ export function ScheduleBoard({
                     onCreateAt(technician.id, startFromEvent(event));
                   }}
                 >
-                  {ticks.map((minute) => (
-                    <div
-                      key={minute}
-                      className={cn(
-                        "pointer-events-none border-b",
-                        minute % 60 === 0 ? "border-border" : "border-border/35",
-                      )}
-                      style={{ height: SLOT_HEIGHT }}
-                    />
-                  ))}
+                  <TimeGrid ticks={ticks} />
 
                   {/* Block time — resizable, movable, click to edit. Never bookable. */}
                   {techBlockouts.map((blockout) => (
@@ -805,7 +796,12 @@ export function ScheduleBoard({
                             : "border-primary/70 bg-primary/10",
                         )}
                         style={laneStyle(ghostPlacement)}
-                      />
+                      >
+                        {/* Compact snap label so the drop time is unmistakable. */}
+                        <span className="absolute -top-2 left-1 rounded bg-primary px-1 py-px text-[10px] font-extrabold text-primary-foreground shadow-sm">
+                          {formatMinutes(hover.start)}
+                        </span>
+                      </div>
                     </div>
                   )}
 
