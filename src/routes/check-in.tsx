@@ -284,15 +284,19 @@ function CheckInKiosk() {
 
   function confirmReturn() {
     const at = returnAt ?? (nowMinutes ?? 9 * 60) + 45;
-    addCheckIn({
-      kind: "Walk-In",
-      name: name.trim() || (pendingAppointment?.guest.name ?? "Guest"),
-      phone: phone.trim(),
-      atMinutes: nowMinutes ?? 9 * 60,
-      serviceIds: selectedServiceIds(optionIds),
-      ...(needsClarification(optionIds) ? { serviceNeedsClarification: true } : {}),
-      returnAtMinutes: at,
-    });
+    // A booked guest already has a booking on the board — never duplicate it.
+    // Only a walk-in becomes a same-day return visit.
+    if (!pendingAppointment) {
+      addCheckIn({
+        kind: "Walk-In",
+        name: name.trim() || "Guest",
+        phone: phone.trim(),
+        atMinutes: nowMinutes ?? 9 * 60,
+        serviceIds: selectedServiceIds(optionIds),
+        ...(needsClarification(optionIds) ? { serviceNeedsClarification: true } : {}),
+        returnAtMinutes: at,
+      });
+    }
     setSuccess({ kind: "Return", returnLabel: formatClock(at) });
     setStep("success");
   }
