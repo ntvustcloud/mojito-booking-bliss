@@ -193,7 +193,7 @@ function BlockCard({
           <>
             <Footprints className="size-3 shrink-0" aria-hidden />
             <span className="truncate">
-              {inQueue ? `Checked in ${formatShortMinutes(block.anchor)}` : "Walk-In"}
+              Walk-In
             </span>
           </>
         ) : (
