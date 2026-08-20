@@ -131,22 +131,18 @@ export function parseApproxTime(value: string): number | undefined {
   return hour * 60 + minute;
 }
 
+/** Past this, we stop quoting a wait and offer to hold a return time instead. */
+export const LONG_WAIT_MINUTES = 15;
+
 /**
- * Deliberately broad wait bands. Never a precise number — the board cannot
- * know whether a chair has actually been cleared.
+ * Deliberately broad wait bands, and never longer than 15 minutes — anything
+ * longer becomes the "Wait Here / Come Back Later" choice instead of a quote.
  */
 export function waitBandLabel(minutes: number): string {
   if (minutes <= 5) return "About 0–5 minutes";
   if (minutes <= 10) return "About 5–10 minutes";
-  if (minutes <= 20) return "About 10–20 minutes";
-  if (minutes <= 30) return "About 20–30 minutes";
-  return "30+ minutes";
+  return "About 10–15 minutes";
 }
-
-export type WaitEstimate =
-  | { known: true; label: string }
-  /** Low confidence — we say a person will help instead of guessing. */
-  | { known: false; label: string };
 
 export type EstimateInput = {
   appointments: Appointment[];
@@ -162,17 +158,18 @@ export type EstimateInput = {
   serviceMinutes?: number;
 };
 
-export function estimateWait(input: EstimateInput): WaitEstimate {
+/** Conservative minutes-until-service estimate. Prototype heuristic only. */
+export function estimateWaitMinutes(input: EstimateInput): number {
   const { appointments, blockouts, now, technicianId, scheduledMinutes, queueAhead } = input;
   const rows = technicianRows(appointments, blockouts, now);
   const isBooked = scheduledMinutes !== undefined;
 
   if (technicianId && technicianId !== "any") {
     const row = rows.find((item) => item.id === technicianId);
-    if (!row || row.state === "Off") return { known: false, label: "A team member will assist you shortly." };
+    if (!row || row.state === "Off") return 999;
     const freeIn = row.freeAt !== undefined ? Math.max(0, row.freeAt - now) : 15;
     const startsIn = isBooked ? Math.max(0, scheduledMinutes - now) : 0;
-    return { known: true, label: waitBandLabel(Math.max(freeIn, startsIn)) };
+    return Math.max(freeIn, startsIn);
   }
 
   const freeNow = rows.filter((row) => row.state === "Available").length;
@@ -185,12 +182,41 @@ export function estimateWait(input: EstimateInput): WaitEstimate {
   const base = freeNow > 0 ? 5 : Math.max(10, soonest);
   const queuePenalty = Math.max(0, queueAhead - freeNow) * 5;
   // Booked guests keep their priority over ordinary walk-ins.
-  const estimate = isBooked
+  return isBooked
     ? Math.max(base, scheduledMinutes - now) + Math.min(queuePenalty, 5)
     : base + queuePenalty + 5;
+}
 
-  if (!isBooked && estimate > 45) return { known: false, label: "A team member will assist you shortly." };
-  return { known: true, label: waitBandLabel(estimate) };
+export type WaitOutcome =
+  /** Served soon — safe to show a broad band. */
+  | { kind: "soon"; label: string }
+  /** Likely longer than ~15 minutes: offer Wait Here / Come Back Later. */
+  | { kind: "long" };
+
+export function waitOutcome(input: EstimateInput): WaitOutcome {
+  const minutes = estimateWaitMinutes(input);
+  if (minutes > LONG_WAIT_MINUTES) return { kind: "long" };
+  return { kind: "soon", label: waitBandLabel(minutes) };
+}
+
+/**
+ * A friendly same-day return window for a customer who would rather not wait.
+ * Rounded to a quarter hour and always a little conservative.
+ */
+export function suggestReturnWindow(input: EstimateInput): { minutes: number; label: string } {
+  const estimate = estimateWaitMinutes(input);
+  const padded = input.now + Math.max(30, Math.min(estimate + 10, 120));
+  const minutes = Math.ceil(padded / 15) * 15;
+  return { minutes, label: `${formatClock(minutes)}–${formatClock(minutes + 15)}` };
+}
+
+export function formatClock(minutes: number): string {
+  const total = ((minutes % 1440) + 1440) % 1440;
+  const hour24 = Math.floor(total / 60);
+  const minute = total % 60;
+  const suffix = hour24 >= 12 ? "PM" : "AM";
+  const hour = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${hour}:${String(minute).padStart(2, "0")} ${suffix}`;
 }
 
 /** Approximate service length used for walk-in estimates. */
@@ -202,4 +228,24 @@ export function walkInMinutes(serviceIds: string[]): number {
     technicianId: "any",
     status: "Scheduled",
   });
+}
+
+/**
+ * Group arrivals are handed to the receptionist, never self-checked in person
+ * by person. Detected from the booking itself: more than one live guest.
+ */
+export type GroupArrival = {
+  appointment: Appointment;
+  guestCount: number;
+  timeLabel: string;
+};
+
+export function groupArrival(matches: MatchedAppointment[]): GroupArrival | undefined {
+  const first = matches[0];
+  if (!first) return undefined;
+  const live = first.appointment.guests.filter((guest) => guest.status !== "Cancelled");
+  const sameBooking = matches.filter((match) => match.appointment.id === first.appointment.id);
+  const guestCount = Math.max(live.length, sameBooking.length);
+  if (guestCount < 2) return undefined;
+  return { appointment: first.appointment, guestCount, timeLabel: first.appointment.time };
 }
