@@ -131,7 +131,7 @@ export function walkInAppointments(records: CheckInRecord[]): Appointment[] {
         title: record.name,
         primaryContact: record.name,
         phone: record.phone,
-        source: returning ? ("Appointment" as const) : ("Walk-In" as const),
+        source: returning ? ("Phone" as const) : ("Walk-In" as const),
         notes,
         guests: [
           {
