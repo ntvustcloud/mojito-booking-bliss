@@ -145,6 +145,8 @@ function BlockCard({
   const isWalkIn = block.source === "Walk-In";
   const inQueue = waitedFor !== undefined;
   const overlapped = overlap > 0 && block.status !== "Cancelled";
+  const requested = block.requestedTechnicianId === block.technicianId;
+  const longWait = waitedFor !== undefined && waitedFor !== null && waitedFor >= 15;
 
   return (
     <button
@@ -169,7 +171,24 @@ function BlockCard({
           "bg-status-warn-bg text-status-warn-fg border-status-warn-fg/50",
       )}
     >
-      <span className="flex items-center gap-1 overflow-hidden text-[10px] font-extrabold tracking-wide whitespace-nowrap opacity-85">
+      {/* Requested technician — always top-right, always red. ½ turn. */}
+      {requested && (
+        <span
+          className="absolute top-0.5 right-1 z-20 leading-none"
+          title={`Requested Technician · ½ Turn — customer specifically asked for ${technicianName(block.technicianId)}`}
+        >
+          <Heart
+            className="size-3.5 shrink-0 fill-red-600 text-red-600 drop-shadow-[0_0_1px_rgb(255_255_255/0.9)]"
+            aria-label={`Requested technician ${technicianName(block.technicianId)} · ½ turn`}
+          />
+        </span>
+      )}
+      <span
+        className={cn(
+          "flex items-center gap-1 overflow-hidden text-[10px] font-extrabold tracking-wide whitespace-nowrap opacity-85",
+          requested && "pr-4",
+        )}
+      >
         {isWalkIn ? (
           <>
             <Footprints className="size-3 shrink-0" aria-hidden />
@@ -202,22 +221,22 @@ function BlockCard({
       </span>
       <span className="flex items-center gap-1">
         <span className="min-w-0 flex-1 truncate text-xs font-extrabold">{block.guestName}</span>
-        {block.requestedTechnicianId === block.technicianId && (
-          <Heart
-            className="size-3 shrink-0 fill-current opacity-70"
-            aria-label={`Customer specifically requested ${technicianName(block.technicianId)} · ½ turn`}
-          />
-        )}
-
       </span>
       {!compact && (
         <span className="truncate text-[11px] leading-tight opacity-85">{block.serviceLabel}</span>
+      )}
+      {isWalkIn && inQueue && (
+        <span className="truncate text-[10px] font-bold opacity-85">
+          Checked in {formatShortMinutes(block.anchor)}
+        </span>
       )}
       <span className="mt-auto flex flex-wrap items-center gap-x-1 text-[10px] font-bold">
         <StateIcon className="size-3 shrink-0" aria-hidden />
         <span className="truncate">{visual.label}</span>
         {waitedFor !== undefined && waitedFor !== null && (
-          <span className="opacity-80">· Waiting {waitedFor} min</span>
+          <span className={cn("opacity-80", longWait && "font-extrabold opacity-100")}>
+            · Waiting {waitedFor} min
+          </span>
         )}
         {block.technicianId === "any" && !isWalkIn && (
           <span className="opacity-70">· Any tech</span>
@@ -232,6 +251,30 @@ function BlockCard({
         )}
       </span>
     </button>
+  );
+}
+
+/**
+ * One shared 15-minute grid, rendered identically in every column so a time
+ * traces horizontally across the whole board. Full hours read stronger.
+ */
+function TimeGrid({ ticks }: { ticks: number[] }) {
+  return (
+    <>
+      {ticks.map((minute) => (
+        <div
+          key={minute}
+          className={cn(
+            "pointer-events-none border-b",
+            minute % 60 === 0 ? "border-border" : "border-border/30",
+          )}
+          style={{
+            height: SLOT_HEIGHT,
+            ...(minute % 60 === 0 ? { borderBottomWidth: 2 } : {}),
+          }}
+        />
+      ))}
+    </>
   );
 }
 
