@@ -596,18 +596,24 @@ export function ScheduleBoard({
                   {dragQuality.get(technician.id) && (
                     <p className="mt-1 flex items-center gap-1 text-[10px] font-extrabold">
                       {(() => {
-                        const quality = dragQuality.get(technician.id)!;
-                        const visual = RECOMMENDATION_VISUALS.find((item) => item.key === quality)!;
+                        const candidate = dragCandidates.get(technician.id)!;
+                        const visual = RECOMMENDATION_VISUALS.find(
+                          (item) => item.key === candidate.quality,
+                        )!;
                         const Icon = visual.icon;
                         return (
                           <span
                             className={cn(
-                              "inline-flex items-center gap-1 rounded border px-1 py-px",
+                              "inline-flex max-w-full items-center gap-1 rounded border px-1 py-px",
                               visual.swatch,
                             )}
                           >
                             <Icon className="size-2.5 shrink-0" aria-hidden />
-                            {visual.label}
+                            <span className="truncate">
+                              {candidate.quality === "ineligible"
+                                ? `Unavailable · ${candidate.detail}`
+                                : visual.label}
+                            </span>
                           </span>
                         );
                       })()}
