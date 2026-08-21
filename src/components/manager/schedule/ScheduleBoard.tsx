@@ -392,14 +392,22 @@ export function ScheduleBoard({
 
 
   // Drag highlight: recommendation quality per technician column.
-  const dragQuality = useMemo(() => {
-    const map = new Map<string, TurnQuality>();
+  const dragCandidates = useMemo(() => {
+    const map = new Map<string, TurnCandidate>();
     if (!dragging) return map;
     for (const candidate of candidatesFor(dragging)) {
-      map.set(candidate.technicianId, candidate.quality);
+      map.set(candidate.technicianId, candidate);
     }
     return map;
   }, [dragging, candidatesFor]);
+
+  const dragQuality = useMemo(() => {
+    const map = new Map<string, TurnQuality>();
+    for (const [id, candidate] of dragCandidates) {
+      map.set(id, candidate.quality);
+    }
+    return map;
+  }, [dragCandidates]);
 
   const qualityTint = (technicianId: string) => {
     const quality = dragQuality.get(technicianId);
@@ -409,7 +417,7 @@ export function ScheduleBoard({
       return "bg-status-live-bg/45 ring-1 ring-inset ring-status-live-fg/35";
     if (quality === "limited")
       return "bg-status-warn-bg/45 ring-1 ring-inset ring-status-warn-fg/40";
-    return "bg-muted/70 opacity-60 ring-1 ring-inset ring-border";
+    return "bg-rec-unavailable-bg/60 ring-1 ring-inset ring-rec-unavailable-border/80";
   };
 
   const totalHeight = slotCount() * SLOT_HEIGHT;
