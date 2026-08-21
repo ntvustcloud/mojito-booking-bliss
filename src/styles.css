@@ -71,6 +71,10 @@
   --color-status-off-bg: var(--status-off-bg);
   --color-status-off-fg: var(--status-off-fg);
 
+  --color-rec-unavailable-bg: var(--rec-unavailable-bg);
+  --color-rec-unavailable-fg: var(--rec-unavailable-fg);
+  --color-rec-unavailable-border: var(--rec-unavailable-border);
+
   --shadow-soft: 0 1px 2px oklch(0.45 0.03 145 / 0.04), 0 8px 24px oklch(0.45 0.03 145 / 0.06);
   --shadow-lift: 0 2px 4px oklch(0.45 0.03 145 / 0.05), 0 18px 40px oklch(0.45 0.03 145 / 0.1);
 }
@@ -125,6 +129,11 @@
   --status-done-fg: oklch(0.56 0.015 150);
   --status-off-bg: oklch(0.95 0.03 25);
   --status-off-fg: oklch(0.5 0.13 27);
+
+  /* Technician recommendation "Unavailable" state — light pink/rose. */
+  --rec-unavailable-bg: oklch(0.955 0.02 18);
+  --rec-unavailable-fg: oklch(0.5 0.065 18);
+  --rec-unavailable-border: oklch(0.82 0.04 18);
 }
 
 @layer base {

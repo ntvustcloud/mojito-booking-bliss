@@ -23,7 +23,8 @@ export function TurnSuggestion({
       <PopoverTrigger
         className={cn(
           "flex w-full items-center gap-1 rounded-md border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[10px] font-extrabold text-primary transition-colors hover:bg-primary/20",
-          !best && "border-border bg-muted/70 text-muted-foreground",
+          !best &&
+            "border-rec-unavailable-border bg-rec-unavailable-bg text-rec-unavailable-fg hover:bg-rec-unavailable-bg/80",
           className,
         )}
       >
@@ -51,7 +52,7 @@ export function TurnSuggestion({
                   candidate.recommended
                     ? "bg-primary text-primary-foreground"
                     : candidate.quality === "ineligible"
-                      ? "bg-muted text-muted-foreground"
+                      ? "bg-rec-unavailable-bg text-rec-unavailable-fg"
                       : "bg-secondary text-secondary-foreground",
                 )}
               >
@@ -69,8 +70,17 @@ export function TurnSuggestion({
                     {formatServiceMoney(candidate.serviceTotal)}
                   </span>
                 </span>
-                <span className="block text-[11px] font-semibold text-muted-foreground">
-                  {candidate.state} · {candidate.detail}
+                <span
+                  className={cn(
+                    "block text-[11px] font-semibold",
+                    candidate.quality === "ineligible"
+                      ? "text-rec-unavailable-fg"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {candidate.quality === "ineligible"
+                    ? `Unavailable · ${candidate.detail}`
+                    : `${candidate.state} · ${candidate.detail}`}
                 </span>
               </span>
             </li>

@@ -392,14 +392,22 @@ export function ScheduleBoard({
 
 
   // Drag highlight: recommendation quality per technician column.
-  const dragQuality = useMemo(() => {
-    const map = new Map<string, TurnQuality>();
+  const dragCandidates = useMemo(() => {
+    const map = new Map<string, TurnCandidate>();
     if (!dragging) return map;
     for (const candidate of candidatesFor(dragging)) {
-      map.set(candidate.technicianId, candidate.quality);
+      map.set(candidate.technicianId, candidate);
     }
     return map;
   }, [dragging, candidatesFor]);
+
+  const dragQuality = useMemo(() => {
+    const map = new Map<string, TurnQuality>();
+    for (const [id, candidate] of dragCandidates) {
+      map.set(id, candidate.quality);
+    }
+    return map;
+  }, [dragCandidates]);
 
   const qualityTint = (technicianId: string) => {
     const quality = dragQuality.get(technicianId);
@@ -409,7 +417,7 @@ export function ScheduleBoard({
       return "bg-status-live-bg/45 ring-1 ring-inset ring-status-live-fg/35";
     if (quality === "limited")
       return "bg-status-warn-bg/45 ring-1 ring-inset ring-status-warn-fg/40";
-    return "bg-muted/70 opacity-60 ring-1 ring-inset ring-border";
+    return "bg-rec-unavailable-bg/60 ring-1 ring-inset ring-rec-unavailable-border/80";
   };
 
   const totalHeight = slotCount() * SLOT_HEIGHT;
@@ -588,18 +596,24 @@ export function ScheduleBoard({
                   {dragQuality.get(technician.id) && (
                     <p className="mt-1 flex items-center gap-1 text-[10px] font-extrabold">
                       {(() => {
-                        const quality = dragQuality.get(technician.id)!;
-                        const visual = RECOMMENDATION_VISUALS.find((item) => item.key === quality)!;
+                        const candidate = dragCandidates.get(technician.id)!;
+                        const visual = RECOMMENDATION_VISUALS.find(
+                          (item) => item.key === candidate.quality,
+                        )!;
                         const Icon = visual.icon;
                         return (
                           <span
                             className={cn(
-                              "inline-flex items-center gap-1 rounded border px-1 py-px",
+                              "inline-flex max-w-full items-center gap-1 rounded border px-1 py-px",
                               visual.swatch,
                             )}
                           >
                             <Icon className="size-2.5 shrink-0" aria-hidden />
-                            {visual.label}
+                            <span className="truncate">
+                              {candidate.quality === "ineligible"
+                                ? `Unavailable · ${candidate.detail}`
+                                : visual.label}
+                            </span>
                           </span>
                         );
                       })()}
