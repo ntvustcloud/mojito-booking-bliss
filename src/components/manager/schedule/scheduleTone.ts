@@ -102,7 +102,7 @@ export const RECOMMENDATION_VISUALS = [
     key: "ineligible",
     label: "Unavailable",
     icon: Ban,
-    swatch: "bg-muted border-border text-muted-foreground",
+    swatch: "bg-rec-unavailable-bg border-rec-unavailable-border text-rec-unavailable-fg",
     meaning: "Busy, blocked, or not enough open time for this service.",
   },
 ] as const;
