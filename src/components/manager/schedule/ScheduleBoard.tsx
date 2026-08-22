@@ -530,11 +530,12 @@ export function ScheduleBoard({
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-card">
       <div ref={scrollRef} className="max-h-[calc(100vh-13rem)] overflow-auto">
-        <div className="min-w-[68rem]">
+        <div className="min-w-[76rem]">
           <div
             className="grid"
             style={{
-              gridTemplateColumns: `4.5rem 24rem repeat(${technicians.length}, minmax(11rem, 1fr))`,
+              gridTemplateColumns: `4.5rem 31rem repeat(${technicians.length}, minmax(11rem, 1fr))`,
+
             }}
           >
             {/* Header row */}
