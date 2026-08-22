@@ -12,27 +12,41 @@ import type { TurnCandidate } from "@/data/turn-system";
 export function TurnSuggestion({
   candidates,
   className,
+  variant = "full",
 }: {
   candidates: TurnCandidate[];
   className?: string;
+  /** How much room the attached card has: full text, first name only, or icon. */
+  variant?: "full" | "compact" | "icon";
 }) {
   const best = candidates.find((candidate) => candidate.recommended);
+  const firstName = best?.name.split(" ")[0] ?? "";
 
   return (
     <Popover>
       <PopoverTrigger
+        title={best ? `Suggested technician: ${best.name}` : "No technician available now"}
         className={cn(
-          "flex w-full items-center gap-1 rounded-md border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[10px] font-extrabold text-primary transition-colors hover:bg-primary/20",
+          "flex items-center gap-1 rounded-md border border-primary/25 bg-primary/90 px-1.5 py-0.5 text-[10px] font-extrabold text-primary-foreground transition-colors hover:bg-primary",
           !best &&
             "border-rec-unavailable-border bg-rec-unavailable-bg text-rec-unavailable-fg hover:bg-rec-unavailable-bg/80",
           className,
         )}
       >
         <Star className="size-3 shrink-0" aria-hidden />
-        <span className="truncate">
-          {best ? `Suggested: ${best.name}` : "No technician available now"}
-        </span>
+        {variant !== "icon" && (
+          <span className="truncate">
+            {best
+              ? variant === "compact"
+                ? firstName
+                : `Suggested: ${best.name}`
+              : variant === "compact"
+                ? "None"
+                : "No technician available now"}
+          </span>
+        )}
       </PopoverTrigger>
+
       <PopoverContent align="start" className="w-80 p-3">
         <p className="text-xs font-extrabold text-foreground">Recommended technicians</p>
         <p className="mt-0.5 text-[10px] font-semibold text-muted-foreground">
