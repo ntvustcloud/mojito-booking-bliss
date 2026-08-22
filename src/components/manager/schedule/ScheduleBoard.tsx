@@ -118,8 +118,7 @@ function availabilityLine(
 
 function BlockCard({
   block,
-  compact,
-  dense,
+  density = "roomy",
   hiddenCount = 0,
   overlap = 0,
   waitedFor,
@@ -128,9 +127,8 @@ function BlockCard({
   onDragStart,
 }: {
   block: ScheduleBlock;
-  compact?: boolean;
-  /** Narrow lane: tighten padding and drop non-essential text. */
-  dense?: boolean;
+  /** How much horizontal room this card has — drives what content survives. */
+  density?: CardDensity;
   /** Overlapping cards in this cluster that didn't fit into a lane. */
   hiddenCount?: number;
   /** Minutes this card overlaps the technician's neighbouring work. */
@@ -148,24 +146,43 @@ function BlockCard({
   const requested = block.requestedTechnicianId === block.technicianId;
   const longWait = waitedFor !== undefined && waitedFor !== null && waitedFor >= 15;
 
+  const tight = density === "tight" || density === "min";
+  const minimal = density === "min";
+  const short = block.duration < 45;
+  // Priority 1: time. Assigned walk-ins read exactly like appointment cards.
+  const range = `${formatShortMinutes(block.start)}–${formatShortMinutes(block.start + block.duration)}`;
+  const timeText = inQueue
+    ? isWalkIn
+      ? minimal
+        ? formatShortMinutes(block.anchor)
+        : `Checked in ${formatShortMinutes(block.anchor)}`
+      : `${minimal ? "" : "Appt "}${formatShortMinutes(block.anchor)}`
+    : tight
+      ? formatShortMinutes(block.start)
+      : range;
+  // Priority 3: service text only when there is real room for it.
+  const showService = !short && !tight;
+  const showWait = waitedFor !== undefined && waitedFor !== null && !minimal;
+
   return (
     <button
       type="button"
       draggable
       onDragStart={onDragStart}
       onClick={onOpen}
-      {...(overlapped
-        ? { title: `${overlap} min overlap with previous appointment` }
-        : {})}
+      title={`${range} · ${block.guestName} · ${visual.label} · ${block.serviceLabel}${
+        overlapped ? ` · ${overlap} min overlap with previous appointment` : ""
+      }`}
       className={cn(
-        "group relative flex h-full w-full flex-col overflow-hidden rounded-lg border px-2 py-1 text-left leading-tight shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-shadow hover:shadow-md",
-        dense && "px-1 py-0.5",
+        "group relative flex h-full w-full flex-col overflow-hidden rounded-lg border px-2.5 py-1.5 text-left leading-tight shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-shadow hover:shadow-md",
+        density === "cozy" && "px-2 py-1",
+        tight && "px-1.5 py-0.5",
         block.isGroup &&
           cn(
             "before:absolute before:inset-y-0 before:left-0 before:w-1 before:content-['']",
             groupAccent(block.appointmentId),
           ),
-        block.isGroup && (dense ? "pl-1.5" : "pl-2.5"),
+        block.isGroup && (tight ? "pl-2" : "pl-3"),
         visual.card,
         overlapped &&
           "bg-status-warn-bg text-status-warn-fg border-status-warn-fg/50",
@@ -190,25 +207,11 @@ function BlockCard({
         )}
       >
         {isWalkIn ? (
-          <>
-            <Footprints className="size-3 shrink-0" aria-hidden />
-            <span className="truncate">
-              {inQueue ? `Checked in ${formatShortMinutes(block.anchor)}` : "Walk-In"}
-            </span>
-          </>
+          <Footprints className="size-3 shrink-0" aria-hidden />
         ) : (
-          <>
-            <CalendarDays className="size-3 shrink-0" aria-hidden />
-            <span className="truncate">
-              {inQueue
-                ? `Appt ${formatShortMinutes(block.anchor)}`
-                : dense
-                  ? formatShortMinutes(block.start)
-                  : `${formatShortMinutes(block.start)}–${formatShortMinutes(block.start + block.duration)}`}
-            </span>
-          </>
+          <CalendarDays className="size-3 shrink-0" aria-hidden />
         )}
-
+        <span className="truncate">{timeText}</span>
         {block.isGroup && <Users className="size-3 shrink-0" aria-hidden />}
         {hiddenCount > 0 && (
           <span
@@ -219,26 +222,25 @@ function BlockCard({
           </span>
         )}
       </span>
-      <span className="flex items-center gap-1">
-        <span className="min-w-0 flex-1 truncate text-xs font-extrabold">{block.guestName}</span>
-      </span>
-      {!compact && (
+      {/* Priority 2: who it is. */}
+      <span className="min-w-0 truncate text-xs font-extrabold">{block.guestName}</span>
+      {showService && (
         <span className="truncate text-[11px] leading-tight opacity-85">{block.serviceLabel}</span>
       )}
-      <span className="mt-auto flex flex-wrap items-center gap-x-1 text-[10px] font-bold">
+      <span className="mt-auto flex items-center gap-x-1 overflow-hidden text-[10px] font-bold whitespace-nowrap">
         <StateIcon className="size-3 shrink-0" aria-hidden />
-        <span className="truncate">{visual.label}</span>
-        {waitedFor !== undefined && waitedFor !== null && (
-          <span className={cn("opacity-80", longWait && "font-extrabold opacity-100")}>
+        {!minimal && <span className="truncate">{visual.label}</span>}
+        {showWait && (
+          <span className={cn("shrink-0 opacity-80", longWait && "font-extrabold opacity-100")}>
             · Waiting {waitedFor} min
           </span>
         )}
-        {block.technicianId === "any" && !isWalkIn && (
+        {block.technicianId === "any" && !isWalkIn && !tight && (
           <span className="opacity-70">· Any tech</span>
         )}
-        {block.arrivedAt !== undefined && (
+        {block.arrivedAt !== undefined && !minimal && (
           <span
-            className="opacity-90"
+            className="shrink-0 opacity-90"
             title={`Checked in at the front tablet · ${formatShortMinutes(block.arrivedAt)}`}
           >
             · ● Arrived
@@ -248,6 +250,17 @@ function BlockCard({
     </button>
   );
 }
+
+/** Horizontal room a card has, derived from how many overlap lanes it shares. */
+type CardDensity = "roomy" | "cozy" | "tight" | "min";
+
+function densityForLanes(lanes: number): CardDensity {
+  if (lanes >= 4) return "min";
+  if (lanes === 3) return "tight";
+  if (lanes === 2) return "cozy";
+  return "roomy";
+}
+
 
 /**
  * One shared 15-minute grid, rendered identically in every column so a time
