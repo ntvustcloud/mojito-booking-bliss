@@ -846,8 +846,8 @@ export function ScheduleBoard({
                         <div className="absolute inset-y-0" style={laneStyle(placement)}>
                           <BlockCard
                             block={block}
-                            compact={block.duration < 55 || laneCount >= 3}
-                            dense={laneCount >= 3}
+                            density={densityForLanes(laneCount)}
+
                             hiddenCount={
                               placement && placement.lane === laneCount - 1
                                 ? placement.hiddenCount
