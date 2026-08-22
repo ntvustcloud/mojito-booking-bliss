@@ -689,40 +689,44 @@ export function ScheduleBoard({
                 const placement = queuedLanes.get(block.key);
                 const laneCount = placement?.lanes ?? 1;
                 const stagger = queueStagger.get(block.key) ?? 0;
+                // The queue column is ~3 tech columns wide, so each lane still
+                // has room — treat it one density step roomier.
+                const density = densityForLanes(laneCount - 1);
                 return (
                   <div
                     key={block.key}
-                    className="absolute inset-x-1 z-10"
+                    className="absolute inset-x-1.5 z-10"
                     style={{
                       top: minutesToOffset(block.anchor) + stagger,
                       height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
                     }}
                   >
-                    <div className="absolute inset-y-0" style={laneStyle(placement)}>
-                      <div className="h-[calc(100%-1.1rem)]">
-                        <BlockCard
-                          block={block}
-                          compact={block.duration < 55 || laneCount >= 3}
-                          dense={laneCount >= 3}
-                          hiddenCount={
-                            placement && placement.lane === laneCount - 1
-                              ? placement.hiddenCount
-                              : 0
-                          }
-                          waitedFor={waitingMinutes(block, nowMinutes)}
-                          now={nowMinutes}
-                          onOpen={() => onOpenAppointment(block.appointmentId)}
-                          {...dragProps(block)}
-                        />
-                      </div>
+                    <div className="absolute inset-y-0" style={laneStyle(placement, 6)}>
+                      <BlockCard
+                        block={block}
+                        density={density}
+                        hiddenCount={
+                          placement && placement.lane === laneCount - 1
+                            ? placement.hiddenCount
+                            : 0
+                        }
+                        waitedFor={waitingMinutes(block, nowMinutes)}
+                        now={nowMinutes}
+                        onOpen={() => onOpenAppointment(block.appointmentId)}
+                        {...dragProps(block)}
+                      />
+                      {/* Suggestion rides on the card's bottom edge instead of
+                          taking its own row in the timeline. */}
                       <TurnSuggestion
                         candidates={suggestions.get(block.key) ?? []}
-                        className="mt-0.5"
+                        variant={density === "min" ? "icon" : density === "tight" ? "compact" : "full"}
+                        className="absolute right-1 -bottom-1.5 z-20 max-w-[calc(100%-0.5rem)] shadow-sm"
                       />
                     </div>
                   </div>
                 );
               })}
+
               {queued.length === 0 && (
                 <p className="absolute inset-x-2 top-2 text-xs text-muted-foreground">
                   Nobody waiting right now.
