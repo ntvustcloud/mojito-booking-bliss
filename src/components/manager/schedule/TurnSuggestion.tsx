@@ -70,11 +70,12 @@ export function TurnSuggestion({
             </span>
           )}
         </PopoverTrigger>
-        {quick && (
+        {quick && best && (
           <button
             type="button"
             aria-label={`Assign to ${best.name}`}
             title={`Assign to ${best.name}`}
+
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
