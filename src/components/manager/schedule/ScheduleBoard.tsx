@@ -721,8 +721,10 @@ export function ScheduleBoard({
                       <TurnSuggestion
                         candidates={suggestions.get(block.key) ?? []}
                         variant={density === "min" ? "icon" : density === "tight" ? "compact" : "full"}
+                        onQuickAssign={() => quickAssign(block)}
                         className="absolute right-1 -bottom-1.5 z-20 max-w-[calc(100%-0.5rem)] shadow-sm"
                       />
+
                     </div>
                   </div>
                 );
