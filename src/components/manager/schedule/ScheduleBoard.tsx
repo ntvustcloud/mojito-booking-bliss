@@ -512,6 +512,43 @@ export function ScheduleBoard({
 
   }
 
+  /**
+   * Quick Assign — one explicit receptionist action that accepts the current
+   * ★ recommendation. Same eligibility rules, same placement rules and the same
+   * `onMove` commit path as drag-and-drop (turns, service totals, Undo).
+   */
+  const quickAssign = useCallback(
+    (block: ScheduleBlock) => {
+      // Recalculate: the recommendation may be stale since the card rendered.
+      const best = candidatesFor(block).find((candidate) => candidate.recommended);
+      if (!best) {
+        toast.error("No technician is available for this booking. Recommendation updated.");
+        return;
+      }
+      const start = isWaitingNow(block, nowMinutes)
+        ? snapToSlot(Math.max(nowMinutes ?? block.start, block.start))
+        : block.start;
+
+      const blocked = findBlockout(blockouts, best.technicianId, start, block.duration);
+      const conflict = findHardConflict(
+        blocks,
+        best.technicianId,
+        start,
+        block.duration,
+        block.key,
+      );
+      if (blocked || conflict) {
+        toast.error(`${best.name} is no longer available for this booking.`, {
+          description: "Recommendation updated.",
+        });
+        return;
+      }
+
+      onMove({ block, technicianId: best.technicianId, start, kind: "assign" });
+    },
+    [candidatesFor, blocks, blockouts, nowMinutes, onMove],
+  );
+
   function dragProps(block: ScheduleBlock) {
     return {
       onDragStart: (event: React.DragEvent) => {
@@ -526,6 +563,7 @@ export function ScheduleBoard({
       },
     };
   }
+
 
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-card">
@@ -721,8 +759,10 @@ export function ScheduleBoard({
                       <TurnSuggestion
                         candidates={suggestions.get(block.key) ?? []}
                         variant={density === "min" ? "icon" : density === "tight" ? "compact" : "full"}
+                        onQuickAssign={() => quickAssign(block)}
                         className="absolute right-1 -bottom-1.5 z-20 max-w-[calc(100%-0.5rem)] shadow-sm"
                       />
+
                     </div>
                   </div>
                 );
