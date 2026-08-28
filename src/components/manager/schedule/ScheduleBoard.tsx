@@ -538,9 +538,8 @@ export function ScheduleBoard({
         toast.error("No technician is available for this booking. Recommendation updated.");
         return;
       }
-      const start = isWaitingNow(block, nowMinutes)
-        ? snapToSlot(Math.max(nowMinutes ?? block.start, block.start))
-        : block.start;
+      // Appointment keeps its scheduled time; walk-in uses now / check-in.
+      const start = placementStart(block);
 
       const blocked = findBlockout(blockouts, best.technicianId, start, block.duration);
       const conflict = findHardConflict(
@@ -559,8 +558,9 @@ export function ScheduleBoard({
 
       onMove({ block, technicianId: best.technicianId, start, kind: "assign" });
     },
-    [candidatesFor, blocks, blockouts, nowMinutes, onMove],
+    [candidatesFor, blocks, blockouts, placementStart, onMove],
   );
+
 
   function dragProps(block: ScheduleBlock) {
     return {
