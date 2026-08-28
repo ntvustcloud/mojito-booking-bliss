@@ -377,6 +377,20 @@ export function ScheduleBoard({
   );
 
 
+  /**
+   * Where a queued card would land if placed right now.
+   *
+   * Appointment → its scheduled time, never moved (Quick Assign is not a
+   * reschedule). Walk-In → the earliest practical slot around check-in / now.
+   */
+  const placementStart = useCallback(
+    (block: ScheduleBlock) => {
+      if (block.bookingType !== "Walk-In") return block.anchor;
+      return snapToSlot(Math.max(nowMinutes ?? block.anchor, block.anchor));
+    },
+    [nowMinutes],
+  );
+
   const candidatesFor = useCallback(
     (block: ScheduleBlock): TurnCandidate[] =>
       evaluateCandidates({
@@ -385,17 +399,16 @@ export function ScheduleBoard({
         blockouts,
         checkIns,
         events: turnEvents,
-        start: isWaitingNow(block, nowMinutes)
-          ? snapToSlot(Math.max(nowMinutes ?? block.start, block.start))
-          : block.start,
+        start: placementStart(block),
         duration: block.duration,
         serviceLabel: block.serviceLabel,
         ignoreKey: block.key,
         requestedTechnicianId: block.requestedTechnicianId,
         now: nowMinutes,
       }),
-    [technicians, blocks, blockouts, checkIns, turnEvents, nowMinutes],
+    [technicians, blocks, blockouts, checkIns, turnEvents, nowMinutes, placementStart],
   );
+
 
   const suggestions = useMemo(() => {
     const map = new Map<string, TurnCandidate[]>();
