@@ -246,20 +246,9 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
 
     const techBlockouts = blockouts.filter((item) => item.technicianId === technician.id);
 
-    if (technician.state === "Break") {
-      const current = techBlockouts.find(
-        (item) => now >= item.start && now < item.end,
-      );
-      const back = current?.end ?? techBlockouts.find((item) => item.start >= now)?.end;
-      return {
-        ...base,
-        quality: "ineligible" as const,
-        detail: back
-          ? `Back at ${formatShortMinutes(back)} · priority preserved`
-          : "On break · priority preserved",
-        priorityPreserved: true,
-      };
-    }
+    // A break only matters when it overlaps the proposed service window —
+    // handled by findBlockout below.
+
 
     const blocked = findBlockout(techBlockouts, technician.id, start, duration);
     if (blocked) {
