@@ -232,14 +232,9 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
         priorityPreserved: false,
       };
     }
-    if (technician.state === "Off") {
-      return {
-        ...base,
-        quality: "ineligible" as const,
-        detail: "Off today",
-        priorityPreserved: false,
-      };
-    }
+    // Eligibility is judged against the PROPOSED booking time, not "now": a
+    // 5 PM–8 PM off-shift block must not make a technician unavailable at 9:30 AM.
+
     if (!canPerformServices(technician.id, serviceLabel)) {
       return {
         ...base,
@@ -251,20 +246,9 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
 
     const techBlockouts = blockouts.filter((item) => item.technicianId === technician.id);
 
-    if (technician.state === "Break") {
-      const current = techBlockouts.find(
-        (item) => now >= item.start && now < item.end,
-      );
-      const back = current?.end ?? techBlockouts.find((item) => item.start >= now)?.end;
-      return {
-        ...base,
-        quality: "ineligible" as const,
-        detail: back
-          ? `Back at ${formatShortMinutes(back)} · priority preserved`
-          : "On break · priority preserved",
-        priorityPreserved: true,
-      };
-    }
+    // A break only matters when it overlaps the proposed service window —
+    // handled by findBlockout below.
+
 
     const blocked = findBlockout(techBlockouts, technician.id, start, duration);
     if (blocked) {

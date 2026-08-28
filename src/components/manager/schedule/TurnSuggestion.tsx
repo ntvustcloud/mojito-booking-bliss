@@ -1,4 +1,4 @@
-import { ArrowRight, Star } from "lucide-react";
+import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatServiceMoney, formatTurns } from "@/data/manager-mock";
@@ -8,10 +8,9 @@ import type { TurnCandidate } from "@/data/turn-system";
 /**
  * Subtle "★ Suggested: Linh" pill on Waiting / Unassigned cards.
  *
- * Single click / tap → recommendation details.
- * Double click (desktop) or the → action (touch) → Quick Assign: accept the
- * recommendation without dragging. The manager still decides; nothing is
- * assigned automatically.
+ * The pill IS the Quick Assign action: a single click / tap accepts the current
+ * recommendation. No separate arrow button. When there is no usable
+ * recommendation the pill opens the details popover instead.
  */
 export function TurnSuggestion({
   candidates,
@@ -30,63 +29,52 @@ export function TurnSuggestion({
   const firstName = best?.name.split(" ")[0] ?? "";
   const quick = best && onQuickAssign ? onQuickAssign : undefined;
 
+  const label =
+    variant === "icon"
+      ? null
+      : best
+        ? variant === "compact"
+          ? firstName
+          : `Suggested: ${best.name}`
+        : variant === "compact"
+          ? "None"
+          : "No technician available now";
+
+  const pillClass = cn(
+    "flex items-center gap-1 rounded-md border border-primary/25 bg-primary/90 px-1.5 py-0.5 text-[10px] font-extrabold text-primary-foreground transition-colors hover:bg-primary",
+    !best &&
+      "border-rec-unavailable-border bg-rec-unavailable-bg text-rec-unavailable-fg hover:bg-rec-unavailable-bg/80",
+    className,
+  );
+
+  if (quick && best) {
+    return (
+      <button
+        type="button"
+        aria-label={`Assign to ${best.name}`}
+        title={`Assign ${best.name} · click to assign`}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          quick();
+        }}
+        className={pillClass}
+      >
+        <Star className="size-3 shrink-0" aria-hidden />
+        {label && <span className="truncate">{label}</span>}
+      </button>
+    );
+  }
+
   return (
     <Popover>
-      <span className={cn("flex items-stretch overflow-hidden rounded-md", className)}>
-        <PopoverTrigger
-          onDoubleClick={
-            quick
-              ? (event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  quick();
-                }
-              : undefined
-          }
-          title={
-            best
-              ? quick
-                ? `Suggested: ${best.name} · click for details, double-click to assign`
-                : `Suggested technician: ${best.name}`
-              : "No technician available now"
-          }
-          className={cn(
-            "flex items-center gap-1 border border-primary/25 bg-primary/90 px-1.5 py-0.5 text-[10px] font-extrabold text-primary-foreground transition-colors hover:bg-primary",
-            quick ? "rounded-l-md" : "rounded-md",
-            !best &&
-              "border-rec-unavailable-border bg-rec-unavailable-bg text-rec-unavailable-fg hover:bg-rec-unavailable-bg/80",
-          )}
-        >
-          <Star className="size-3 shrink-0" aria-hidden />
-          {variant !== "icon" && (
-            <span className="truncate">
-              {best
-                ? variant === "compact"
-                  ? firstName
-                  : `Suggested: ${best.name}`
-                : variant === "compact"
-                  ? "None"
-                  : "No technician available now"}
-            </span>
-          )}
-        </PopoverTrigger>
-        {quick && best && (
-          <button
-            type="button"
-            aria-label={`Assign to ${best.name}`}
-            title={`Assign to ${best.name}`}
-
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              quick();
-            }}
-            className="flex items-center rounded-r-md border border-l-0 border-primary/25 bg-primary px-1 text-primary-foreground transition-colors hover:bg-primary/80"
-          >
-            <ArrowRight className="size-3 shrink-0" aria-hidden />
-          </button>
-        )}
-      </span>
+      <PopoverTrigger
+        title={best ? `Suggested technician: ${best.name}` : "No technician available now"}
+        className={pillClass}
+      >
+        <Star className="size-3 shrink-0" aria-hidden />
+        {label && <span className="truncate">{label}</span>}
+      </PopoverTrigger>
 
       <PopoverContent align="start" className="w-80 p-3">
         <p className="text-xs font-extrabold text-foreground">Recommended technicians</p>
@@ -99,16 +87,7 @@ export function TurnSuggestion({
             Why {best.name}: {best.reason}
           </p>
         )}
-        {quick && best && (
-          <button
-            type="button"
-            onClick={quick}
-            className="mt-2 flex w-full items-center justify-center gap-1 rounded-md bg-primary px-2 py-1.5 text-[11px] font-extrabold text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Assign to {best.name}
-            <ArrowRight className="size-3.5" aria-hidden />
-          </button>
-        )}
+
 
         <ol className="mt-2 space-y-2">
           {candidates.map((candidate, index) => (

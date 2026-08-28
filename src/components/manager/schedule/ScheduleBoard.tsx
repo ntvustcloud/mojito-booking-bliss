@@ -377,6 +377,20 @@ export function ScheduleBoard({
   );
 
 
+  /**
+   * Where a queued card would land if placed right now.
+   *
+   * Appointment → its scheduled time, never moved (Quick Assign is not a
+   * reschedule). Walk-In → the earliest practical slot around check-in / now.
+   */
+  const placementStart = useCallback(
+    (block: ScheduleBlock) => {
+      if (block.bookingType !== "Walk-In") return block.anchor;
+      return snapToSlot(Math.max(nowMinutes ?? block.anchor, block.anchor));
+    },
+    [nowMinutes],
+  );
+
   const candidatesFor = useCallback(
     (block: ScheduleBlock): TurnCandidate[] =>
       evaluateCandidates({
@@ -385,17 +399,16 @@ export function ScheduleBoard({
         blockouts,
         checkIns,
         events: turnEvents,
-        start: isWaitingNow(block, nowMinutes)
-          ? snapToSlot(Math.max(nowMinutes ?? block.start, block.start))
-          : block.start,
+        start: placementStart(block),
         duration: block.duration,
         serviceLabel: block.serviceLabel,
         ignoreKey: block.key,
         requestedTechnicianId: block.requestedTechnicianId,
         now: nowMinutes,
       }),
-    [technicians, blocks, blockouts, checkIns, turnEvents, nowMinutes],
+    [technicians, blocks, blockouts, checkIns, turnEvents, nowMinutes, placementStart],
   );
+
 
   const suggestions = useMemo(() => {
     const map = new Map<string, TurnCandidate[]>();
@@ -525,9 +538,8 @@ export function ScheduleBoard({
         toast.error("No technician is available for this booking. Recommendation updated.");
         return;
       }
-      const start = isWaitingNow(block, nowMinutes)
-        ? snapToSlot(Math.max(nowMinutes ?? block.start, block.start))
-        : block.start;
+      // Appointment keeps its scheduled time; walk-in uses now / check-in.
+      const start = placementStart(block);
 
       const blocked = findBlockout(blockouts, best.technicianId, start, block.duration);
       const conflict = findHardConflict(
@@ -546,8 +558,9 @@ export function ScheduleBoard({
 
       onMove({ block, technicianId: best.technicianId, start, kind: "assign" });
     },
-    [candidatesFor, blocks, blockouts, nowMinutes, onMove],
+    [candidatesFor, blocks, blockouts, placementStart, onMove],
   );
+
 
   function dragProps(block: ScheduleBlock) {
     return {
