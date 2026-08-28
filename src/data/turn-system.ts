@@ -232,14 +232,9 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
         priorityPreserved: false,
       };
     }
-    if (technician.state === "Off") {
-      return {
-        ...base,
-        quality: "ineligible" as const,
-        detail: "Off today",
-        priorityPreserved: false,
-      };
-    }
+    // Eligibility is judged against the PROPOSED booking time, not "now": a
+    // 5 PM–8 PM off-shift block must not make a technician unavailable at 9:30 AM.
+
     if (!canPerformServices(technician.id, serviceLabel)) {
       return {
         ...base,
