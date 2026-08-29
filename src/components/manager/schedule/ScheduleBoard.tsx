@@ -381,15 +381,21 @@ export function ScheduleBoard({
    * Where a queued card would land if placed right now.
    *
    * Appointment → its scheduled time, never moved (Quick Assign is not a
-   * reschedule). Walk-In → the earliest practical slot around check-in / now.
+   * reschedule). Walk-In → anchored on the CHECK-IN time, snapped to the
+   * 15-minute grid, and never pushed more than one slot past arrival even when
+   * the receptionist assigns later in the day.
    */
   const placementStart = useCallback(
     (block: ScheduleBlock) => {
       if (block.bookingType !== "Walk-In") return block.anchor;
-      return snapToSlot(Math.max(nowMinutes ?? block.anchor, block.anchor));
+      const arrival = block.arrivedAt ?? block.anchor;
+      const latest = arrival + SLOT_MINUTES;
+      const practical = Math.min(Math.max(nowMinutes ?? arrival, arrival), latest);
+      return snapToSlot(practical);
     },
     [nowMinutes],
   );
+
 
   const candidatesFor = useCallback(
     (block: ScheduleBlock): TurnCandidate[] =>
