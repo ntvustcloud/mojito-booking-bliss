@@ -747,13 +747,16 @@ export function ScheduleBoard({
                 return (
                   <div
                     key={block.key}
-                    className="absolute inset-x-1.5 z-10"
+                    className="pointer-events-none absolute inset-x-1.5 z-10"
                     style={{
                       top: minutesToOffset(block.anchor) + stagger,
                       height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
                     }}
                   >
-                    <div className="absolute inset-y-0" style={laneStyle(placement, 6)}>
+                    <div
+                      className="pointer-events-auto absolute inset-y-0"
+                      style={laneStyle(placement, 6)}
+                    >
                       <BlockCard
                         block={block}
                         density={density}
@@ -773,8 +776,9 @@ export function ScheduleBoard({
                         candidates={suggestions.get(block.key) ?? []}
                         variant={density === "min" ? "icon" : density === "tight" ? "compact" : "full"}
                         onQuickAssign={() => quickAssign(block)}
-                        className="absolute right-1 -bottom-1.5 z-20 max-w-[calc(100%-0.5rem)] shadow-sm"
+                        className="absolute right-1 -bottom-1 z-40 max-w-[calc(100%-0.5rem)] shadow-sm"
                       />
+
 
                     </div>
                   </div>
