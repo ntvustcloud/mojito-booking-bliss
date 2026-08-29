@@ -556,11 +556,15 @@ export function ScheduleBoard({
         block.key,
       );
       if (blocked || conflict) {
-        toast.error(`${best.name} is no longer available for this booking.`, {
-          description: "Recommendation updated.",
-        });
+        toast.error(
+          block.bookingType === "Walk-In"
+            ? `${best.name} is not available around the customer's check-in time.`
+            : `${best.name} is no longer available for this booking.`,
+          { description: "Recommendation updated." },
+        );
         return;
       }
+
 
       onMove({ block, technicianId: best.technicianId, start, kind: "assign" });
     },
