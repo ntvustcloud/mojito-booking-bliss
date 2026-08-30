@@ -16,13 +16,16 @@ export const SCHEDULING_DURATIONS: Record<string, number> = {
   // Manicure
   "classic-manicure": 30,
   "spa-manicure": 30,
+  "gel-manicure": 30,
   // Pedicure
   "express-pedicure": 30, // Basic pedicure
-  "signature-pedicure": 40, // Spa pedicure
+  "signature-pedicure": 50, // Spa pedicure
   "deluxe-pedicure": 50,
+  "gel-pedicure": 45,
   // Enhancements
   "acrylic-full-set": 45,
   "acrylic-fill": 35,
+  "gel-x-full-set": 90,
 };
 
 /** Scheduled minutes for one service id. */
