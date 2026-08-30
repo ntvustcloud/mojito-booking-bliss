@@ -35,11 +35,7 @@ import {
 import {
   formatServiceMoney,
   guestServiceValue,
-  initialTurnEvents,
-  technicianBlockouts as seedBlockouts,
-  technicianCheckIns,
   technicianName,
-  todayAppointments,
   type Appointment,
   type BookingGuest,
   type TechnicianBlockout,
@@ -47,6 +43,13 @@ import {
 import { technicianRows } from "@/data/technician-state";
 import { arrivedGuests, useCheckIns, walkInAppointments } from "@/data/check-in-store";
 import { turnValueFor, type TurnEvent } from "@/data/turn-system";
+import {
+  testDayAppointments,
+  testDayBlockouts,
+  testDayCheckIns,
+  testDayTurnEvents,
+} from "@/data/regression-day";
+import { TestDayPanel } from "@/components/manager/schedule/TestDayPanel";
 
 export const Route = createFileRoute("/manager/today")({
   head: () => ({
@@ -70,9 +73,9 @@ export const Route = createFileRoute("/manager/today")({
 
 function TodayBoard() {
   // Mock local state — replace with shared salon data later.
-  const [appointments, setAppointments] = useState<Appointment[]>(todayAppointments);
-  const [blockouts, setBlockouts] = useState<TechnicianBlockout[]>(seedBlockouts);
-  const [turnEvents, setTurnEvents] = useState<TurnEvent[]>(initialTurnEvents);
+  const [appointments, setAppointments] = useState<Appointment[]>(testDayAppointments);
+  const [blockouts, setBlockouts] = useState<TechnicianBlockout[]>(testDayBlockouts);
+  const [turnEvents, setTurnEvents] = useState<TurnEvent[]>(testDayTurnEvents);
   const [openId, setOpenId] = useState<string | null>(null);
   const [bookingOpen, setBookingOpen] = useState(false);
   const [bookingSeed, setBookingSeed] = useState<QuickBookingSeed | null>(null);
@@ -438,6 +441,15 @@ function TodayBoard() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <TestDayPanel
+            onReset={() => {
+              setAppointments(testDayAppointments);
+              setBlockouts(testDayBlockouts);
+              setTurnEvents(testDayTurnEvents);
+              setOpenId(null);
+              toast.success("V1 test day reset");
+            }}
+          />
           <ColorGuide />
           <Button
             variant="outline"
@@ -477,7 +489,7 @@ function TodayBoard() {
           technicians={rows}
           blockouts={blockouts}
           turnEvents={turnEvents}
-          checkIns={technicianCheckIns}
+          checkIns={testDayCheckIns}
           registerScrollToNow={registerScrollToNow}
           nowMinutes={boardNow}
           onOpenAppointment={(id) => setOpenId(id)}
