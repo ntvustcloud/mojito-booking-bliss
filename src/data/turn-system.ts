@@ -132,20 +132,23 @@ export function turnOrder(
     .sort((a, b) => {
       const totalA = totals[a.id] ?? 0;
       const totalB = totals[b.id] ?? 0;
+      // 1. Realized turn fairness.
       if (turnBucket(totalA) !== turnBucket(totalB)) return totalA - totalB;
-      // Same turn bucket → the lighter Service Total goes first.
+      if (totalA !== totalB) return totalA - totalB;
+      // 2. Daily check-in order owns the turn while turns are equal.
+      const checkA = checkInMinute(checkIns, a.id);
+      const checkB = checkInMinute(checkIns, b.id);
+      if (checkA !== null && checkB !== null && checkA !== checkB) return checkA - checkB;
+      if (checkA === null && checkB !== null) return 1;
+      if (checkB === null && checkA !== null) return -1;
+      // 3. Realized Service Total only breaks a remaining tie.
       const moneyA = revenues[a.id] ?? 0;
       const moneyB = revenues[b.id] ?? 0;
       if (moneyA !== moneyB) return moneyA - moneyB;
-      if (totalA !== totalB) return totalA - totalB;
-      const checkA = checkInMinute(checkIns, a.id);
-      const checkB = checkInMinute(checkIns, b.id);
-      if (checkA === null && checkB === null) return a.name.localeCompare(b.name);
-      if (checkA === null) return 1;
-      if (checkB === null) return -1;
-      return checkA - checkB;
+      return a.name.localeCompare(b.name);
     })
     .map((technician) => technician.id);
+
 }
 
 
