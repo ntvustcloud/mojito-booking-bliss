@@ -369,12 +369,14 @@ export function ScheduleBoard({
 
 
   // ---- Turn Recommendation System (decision support only) ----
-  const totals = useMemo(() => turnTotals(turnEvents), [turnEvents]);
-  const revenues = useMemo(() => serviceTotals(turnEvents), [turnEvents]);
+  // Realized fairness only: future bookings reserve time but earn nothing yet.
+  const totals = useMemo(() => turnTotals(turnEvents, nowMinutes), [turnEvents, nowMinutes]);
+  const revenues = useMemo(() => serviceTotals(turnEvents, nowMinutes), [turnEvents, nowMinutes]);
   const positions = useMemo(
     () => turnPositions(turnOrder(technicians, checkIns, totals, revenues)),
     [technicians, checkIns, totals, revenues],
   );
+
 
 
   /**
