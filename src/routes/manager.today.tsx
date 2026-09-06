@@ -204,9 +204,12 @@ function TodayBoard() {
           id: `turn-${technicianId}-${guestKey}`,
           technicianId,
           atMinutes,
+          // Reservation now, realized fairness only once the service window ends.
+          realizesAtMinutes: atMinutes + block.duration,
           kind,
           value,
           serviceValue: block.serviceValue,
+
           guestKey,
           guestName: block.guestName,
           serviceLabel: block.serviceLabel,
