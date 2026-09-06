@@ -743,7 +743,6 @@ export function ScheduleBoard({
               {queued.map((block) => {
                 const placement = queuedLanes.get(block.key);
                 const laneCount = placement?.lanes ?? 1;
-                const stagger = queueStagger.get(block.key) ?? 0;
                 // The queue column is ~3 tech columns wide, so each lane still
                 // has room — treat it one density step roomier.
                 const density = densityForLanes(laneCount - 1);
@@ -752,10 +751,11 @@ export function ScheduleBoard({
                     key={block.key}
                     className="pointer-events-none absolute inset-x-1.5 z-10"
                     style={{
-                      top: minutesToOffset(block.anchor) + stagger,
-                      height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
+                      top: minutesToOffset(block.anchor),
+                      height: Math.max(MIN_CARD_HEIGHT, block.duration * PIXELS_PER_MINUTE - 3),
                     }}
                   >
+
                     <div
                       className="pointer-events-auto absolute inset-y-0"
                       style={laneStyle(placement, 6)}
