@@ -225,9 +225,11 @@ export type TurnInput = {
  */
 export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
   const { technicians, blocks, blockouts, checkIns, events, start, duration, serviceLabel } = input;
-  const totals = turnTotals(events);
-  const revenues = serviceTotals(events);
+  // Realized values only — a booking later today is a reservation, not work done.
+  const totals = turnTotals(events, input.now);
+  const revenues = serviceTotals(events, input.now);
   const positions = turnPositions(turnOrder(technicians, checkIns, totals, revenues));
+
   const now = input.now ?? start;
   const ignoreKey = input.ignoreKey ?? "";
 
