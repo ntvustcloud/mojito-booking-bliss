@@ -40,6 +40,12 @@ export type TurnEvent = {
   technicianId: string;
   /** Minutes from midnight. */
   atMinutes: number;
+  /**
+   * Minute the booking's scheduled service window ends. Turn and service value
+   * only become REALIZED after this moment (a future booking is a reservation,
+   * not earned work). Check-in events realize immediately.
+   */
+  realizesAtMinutes: number;
   kind: TurnEventKind;
   /** Turn value added by this event (0 for check-in). */
   value: number;
@@ -62,31 +68,44 @@ export const TURN_VALUES = {
 /** Mock check-in clock — replace with a real employee check-in feed later. */
 export type TechnicianCheckIn = { technicianId: string; atMinutes: number };
 
-export function turnTotals(events: TurnEvent[]): Record<string, number> {
+/**
+ * Realized = the scheduled service window has already finished. Anything still
+ * ahead of the clock is only a reservation: 0 turn, $0 service.
+ */
+export function isRealized(event: TurnEvent, now: number | null): boolean {
+  if (now === null) return false;
+  return event.realizesAtMinutes <= now;
+}
+
+/** Realized turns per technician — future bookings contribute nothing. */
+export function turnTotals(events: TurnEvent[], now: number | null): Record<string, number> {
   const totals: Record<string, number> = {};
   for (const event of events) {
-    totals[event.technicianId] = (totals[event.technicianId] ?? 0) + event.value;
+    totals[event.technicianId] =
+      (totals[event.technicianId] ?? 0) + (isRealized(event, now) ? event.value : 0);
   }
   return totals;
 }
 
-/** "Service Total Today" per technician — service prices only, never income. */
-export function serviceTotals(events: TurnEvent[]): Record<string, number> {
+/** Realized "Service Total Today" per technician — service prices, never income. */
+export function serviceTotals(events: TurnEvent[], now: number | null): Record<string, number> {
   const totals: Record<string, number> = {};
   for (const event of events) {
     totals[event.technicianId] =
-      (totals[event.technicianId] ?? 0) + (event.serviceValue || 0);
+      (totals[event.technicianId] ?? 0) +
+      (isRealized(event, now) ? event.serviceValue || 0 : 0);
   }
   return totals;
 }
 
 /**
  * Turn buckets group "reasonably similar" turn priority. Inside one bucket the
- * Service Total becomes the tie-breaker; across buckets turn fairness wins.
+ * daily check-in order leads, and Service Total only breaks remaining ties.
  */
 export function turnBucket(total: number): number {
   return Math.floor(total + 1e-9);
 }
+
 
 export function checkInMinute(checkIns: TechnicianCheckIn[], technicianId: string): number | null {
   return checkIns.find((item) => item.technicianId === technicianId)?.atMinutes ?? null;
@@ -113,20 +132,23 @@ export function turnOrder(
     .sort((a, b) => {
       const totalA = totals[a.id] ?? 0;
       const totalB = totals[b.id] ?? 0;
+      // 1. Realized turn fairness.
       if (turnBucket(totalA) !== turnBucket(totalB)) return totalA - totalB;
-      // Same turn bucket → the lighter Service Total goes first.
+      if (totalA !== totalB) return totalA - totalB;
+      // 2. Daily check-in order owns the turn while turns are equal.
+      const checkA = checkInMinute(checkIns, a.id);
+      const checkB = checkInMinute(checkIns, b.id);
+      if (checkA !== null && checkB !== null && checkA !== checkB) return checkA - checkB;
+      if (checkA === null && checkB !== null) return 1;
+      if (checkB === null && checkA !== null) return -1;
+      // 3. Realized Service Total only breaks a remaining tie.
       const moneyA = revenues[a.id] ?? 0;
       const moneyB = revenues[b.id] ?? 0;
       if (moneyA !== moneyB) return moneyA - moneyB;
-      if (totalA !== totalB) return totalA - totalB;
-      const checkA = checkInMinute(checkIns, a.id);
-      const checkB = checkInMinute(checkIns, b.id);
-      if (checkA === null && checkB === null) return a.name.localeCompare(b.name);
-      if (checkA === null) return 1;
-      if (checkB === null) return -1;
-      return checkA - checkB;
+      return a.name.localeCompare(b.name);
     })
     .map((technician) => technician.id);
+
 }
 
 
@@ -203,9 +225,11 @@ export type TurnInput = {
  */
 export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
   const { technicians, blocks, blockouts, checkIns, events, start, duration, serviceLabel } = input;
-  const totals = turnTotals(events);
-  const revenues = serviceTotals(events);
+  // Realized values only — a booking later today is a reservation, not work done.
+  const totals = turnTotals(events, input.now);
+  const revenues = serviceTotals(events, input.now);
   const positions = turnPositions(turnOrder(technicians, checkIns, totals, revenues));
+
   const now = input.now ?? start;
   const ignoreKey = input.ignoreKey ?? "";
 
@@ -314,15 +338,16 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
   const eligible = candidates
     .filter((candidate) => candidate.quality !== "ineligible")
     .sort((a, b) => {
-      // 1. Turn fairness is primary…
+      // 1. Realized turn fairness is primary…
       if (turnBucket(a.total) !== turnBucket(b.total)) return a.total - b.total;
-      // 2. …Service Total balances technicians on the same turn level…
-      if (a.serviceTotal !== b.serviceTotal) return a.serviceTotal - b.serviceTotal;
       if (a.total !== b.total) return a.total - b.total;
+      // 2. …then the daily check-in order (whoever owns the turn)…
       const checkA = checkInMinute(checkIns, a.technicianId) ?? Infinity;
       const checkB = checkInMinute(checkIns, b.technicianId) ?? Infinity;
       if (checkA !== checkB) return checkA - checkB;
-      // 3. Final tie-breaker: whoever has been idle longest.
+      // 3. …then realized Service Total balance…
+      if (a.serviceTotal !== b.serviceTotal) return a.serviceTotal - b.serviceTotal;
+      // 4. Final tie-breaker: whoever has been idle longest.
       return (
         lastFinishedBefore(blocks, a.technicianId, now) -
         lastFinishedBefore(blocks, b.technicianId, now)
@@ -342,10 +367,10 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
     const runnerUp = eligible.find((candidate) => candidate !== best);
     best.reason = requested
       ? "Customer requested this technician"
-      : runnerUp && turnBucket(runnerUp.total) === turnBucket(best.total) &&
-          runnerUp.serviceTotal > best.serviceTotal
-        ? `Same turn count as ${runnerUp.name}, lower service total today`
-        : `Fewest turns today (${best.total.toFixed(1)}) and open time now`;
+      : runnerUp && turnBucket(runnerUp.total) === turnBucket(best.total)
+        ? `Same realized turns as ${runnerUp.name}, earlier in today's turn order`
+        : `Fewest realized turns today (${best.total.toFixed(1)}) and open time now`;
+
   }
 
   const skipped = candidates

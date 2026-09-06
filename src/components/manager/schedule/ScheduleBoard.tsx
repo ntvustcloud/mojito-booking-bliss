@@ -37,8 +37,9 @@ import {
 
 /** Placeholder key for the drag preview card inside a column's lane layout. */
 const GHOST_KEY = "__drag-preview__";
-/** Small downward step so queue cards read as check-in order 1, 2, 3… */
-const QUEUE_STAGGER = 6;
+/** Shortest a card may render, so a 20-minute service stays readable. */
+const MIN_CARD_HEIGHT = 56;
+
 import { TurnPriorityBadge } from "@/components/manager/schedule/TurnPriorityBadge";
 import { TurnSuggestion } from "@/components/manager/schedule/TurnSuggestion";
 import { TurnStrip } from "@/components/manager/schedule/TurnStrip";
@@ -333,35 +334,25 @@ export function ScheduleBoard({
     () => queued.filter((block) => isWaitingNow(block, nowMinutes)),
     [queued, nowMinutes],
   );
-  // Side-by-side lanes for queued cards that share a time range.
+  /**
+   * Same calendar lane engine as the technician columns. Lanes are measured on
+   * the card's VISUAL span (cards never render shorter than MIN_CARD_HEIGHT),
+   * so two cards that look like they touch always split into equal lanes
+   * instead of stacking. Nothing is pushed downward — every card keeps its
+   * true time position (appointment = scheduled, walk-in = check-in).
+   */
   const queuedLanes = useMemo(
     () =>
       layoutLanes(
         queued.map((block) => ({
           key: block.key,
           start: block.anchor,
-          duration: block.duration,
+          duration: Math.max(MIN_CARD_HEIGHT / PIXELS_PER_MINUTE, block.duration),
         })),
       ),
     [queued],
   );
-  /** Tiny downward step so same-time walk-ins read as check-in order 1, 2, 3… */
-  const queueStagger = useMemo(() => {
-    const map = new Map<string, number>();
-    const walkIns = queued.filter((block) => block.source === "Walk-In");
-    let anchorStart: number | null = null;
-    let order = 0;
-    for (const block of walkIns) {
-      if (anchorStart === null || block.anchor - anchorStart > 10) {
-        anchorStart = block.anchor;
-        order = 0;
-      } else {
-        order += 1;
-      }
-      map.set(block.key, order * QUEUE_STAGGER);
-    }
-    return map;
-  }, [queued]);
+
   const dragged = useRef<ScheduleBlock | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [hover, setHover] = useState<{ technicianId: string; start: number } | null>(null);
@@ -369,12 +360,14 @@ export function ScheduleBoard({
 
 
   // ---- Turn Recommendation System (decision support only) ----
-  const totals = useMemo(() => turnTotals(turnEvents), [turnEvents]);
-  const revenues = useMemo(() => serviceTotals(turnEvents), [turnEvents]);
+  // Realized fairness only: future bookings reserve time but earn nothing yet.
+  const totals = useMemo(() => turnTotals(turnEvents, nowMinutes), [turnEvents, nowMinutes]);
+  const revenues = useMemo(() => serviceTotals(turnEvents, nowMinutes), [turnEvents, nowMinutes]);
   const positions = useMemo(
     () => turnPositions(turnOrder(technicians, checkIns, totals, revenues)),
     [technicians, checkIns, totals, revenues],
   );
+
 
 
   /**
@@ -750,7 +743,6 @@ export function ScheduleBoard({
               {queued.map((block) => {
                 const placement = queuedLanes.get(block.key);
                 const laneCount = placement?.lanes ?? 1;
-                const stagger = queueStagger.get(block.key) ?? 0;
                 // The queue column is ~3 tech columns wide, so each lane still
                 // has room — treat it one density step roomier.
                 const density = densityForLanes(laneCount - 1);
@@ -759,10 +751,11 @@ export function ScheduleBoard({
                     key={block.key}
                     className="pointer-events-none absolute inset-x-1.5 z-10"
                     style={{
-                      top: minutesToOffset(block.anchor) + stagger,
-                      height: Math.max(56, block.duration * PIXELS_PER_MINUTE - 3),
+                      top: minutesToOffset(block.anchor),
+                      height: Math.max(MIN_CARD_HEIGHT, block.duration * PIXELS_PER_MINUTE - 3),
                     }}
                   >
+
                     <div
                       className="pointer-events-auto absolute inset-y-0"
                       style={laneStyle(placement, 6)}

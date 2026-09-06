@@ -204,9 +204,12 @@ function TodayBoard() {
           id: `turn-${technicianId}-${guestKey}`,
           technicianId,
           atMinutes,
+          // Reservation now, realized fairness only once the service window ends.
+          realizesAtMinutes: atMinutes + block.duration,
           kind,
           value,
           serviceValue: block.serviceValue,
+
           guestKey,
           guestName: block.guestName,
           serviceLabel: block.serviceLabel,
@@ -336,13 +339,14 @@ function TodayBoard() {
       },
     ]);
     if (assigned) {
-      const serviceValue = guestServiceValue({
+      const newGuest: BookingGuest = {
         id: `${id}-g`,
         name,
         serviceIds: draft.serviceIds,
         technicianId: draft.technicianId,
         status: "Scheduled",
-      });
+      };
+      const serviceValue = guestServiceValue(newGuest);
       const { value, kind } = turnValueFor(
         draft.technicianId,
         undefined,
@@ -354,9 +358,11 @@ function TodayBoard() {
           id: `turn-${draft.technicianId}-${id}-g`,
           technicianId: draft.technicianId,
           atMinutes: minutes,
+          realizesAtMinutes: minutes + guestDuration(newGuest),
           kind,
           value,
           serviceValue,
+
           guestKey: `${id}:${id}-g`,
           guestName: name,
           label: kind === "Walk-In" ? `${name} — walk-in` : `${name} — salon assigned`,
