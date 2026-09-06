@@ -333,35 +333,25 @@ export function ScheduleBoard({
     () => queued.filter((block) => isWaitingNow(block, nowMinutes)),
     [queued, nowMinutes],
   );
-  // Side-by-side lanes for queued cards that share a time range.
+  /**
+   * Same calendar lane engine as the technician columns. Lanes are measured on
+   * the card's VISUAL span (cards never render shorter than MIN_CARD_HEIGHT),
+   * so two cards that look like they touch always split into equal lanes
+   * instead of stacking. Nothing is pushed downward — every card keeps its
+   * true time position (appointment = scheduled, walk-in = check-in).
+   */
   const queuedLanes = useMemo(
     () =>
       layoutLanes(
         queued.map((block) => ({
           key: block.key,
           start: block.anchor,
-          duration: block.duration,
+          duration: Math.max(MIN_CARD_HEIGHT / PIXELS_PER_MINUTE, block.duration),
         })),
       ),
     [queued],
   );
-  /** Tiny downward step so same-time walk-ins read as check-in order 1, 2, 3… */
-  const queueStagger = useMemo(() => {
-    const map = new Map<string, number>();
-    const walkIns = queued.filter((block) => block.source === "Walk-In");
-    let anchorStart: number | null = null;
-    let order = 0;
-    for (const block of walkIns) {
-      if (anchorStart === null || block.anchor - anchorStart > 10) {
-        anchorStart = block.anchor;
-        order = 0;
-      } else {
-        order += 1;
-      }
-      map.set(block.key, order * QUEUE_STAGGER);
-    }
-    return map;
-  }, [queued]);
+
   const dragged = useRef<ScheduleBlock | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [hover, setHover] = useState<{ technicianId: string; start: number } | null>(null);
