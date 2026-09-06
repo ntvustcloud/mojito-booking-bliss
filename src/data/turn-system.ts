@@ -336,15 +336,16 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
   const eligible = candidates
     .filter((candidate) => candidate.quality !== "ineligible")
     .sort((a, b) => {
-      // 1. Turn fairness is primary…
+      // 1. Realized turn fairness is primary…
       if (turnBucket(a.total) !== turnBucket(b.total)) return a.total - b.total;
-      // 2. …Service Total balances technicians on the same turn level…
-      if (a.serviceTotal !== b.serviceTotal) return a.serviceTotal - b.serviceTotal;
       if (a.total !== b.total) return a.total - b.total;
+      // 2. …then the daily check-in order (whoever owns the turn)…
       const checkA = checkInMinute(checkIns, a.technicianId) ?? Infinity;
       const checkB = checkInMinute(checkIns, b.technicianId) ?? Infinity;
       if (checkA !== checkB) return checkA - checkB;
-      // 3. Final tie-breaker: whoever has been idle longest.
+      // 3. …then realized Service Total balance…
+      if (a.serviceTotal !== b.serviceTotal) return a.serviceTotal - b.serviceTotal;
+      // 4. Final tie-breaker: whoever has been idle longest.
       return (
         lastFinishedBefore(blocks, a.technicianId, now) -
         lastFinishedBefore(blocks, b.technicianId, now)
@@ -364,10 +365,10 @@ export function evaluateCandidates(input: TurnInput): TurnCandidate[] {
     const runnerUp = eligible.find((candidate) => candidate !== best);
     best.reason = requested
       ? "Customer requested this technician"
-      : runnerUp && turnBucket(runnerUp.total) === turnBucket(best.total) &&
-          runnerUp.serviceTotal > best.serviceTotal
-        ? `Same turn count as ${runnerUp.name}, lower service total today`
-        : `Fewest turns today (${best.total.toFixed(1)}) and open time now`;
+      : runnerUp && turnBucket(runnerUp.total) === turnBucket(best.total)
+        ? `Same realized turns as ${runnerUp.name}, earlier in today's turn order`
+        : `Fewest realized turns today (${best.total.toFixed(1)}) and open time now`;
+
   }
 
   const skipped = candidates
