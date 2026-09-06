@@ -40,6 +40,12 @@ export type TurnEvent = {
   technicianId: string;
   /** Minutes from midnight. */
   atMinutes: number;
+  /**
+   * Minute the booking's scheduled service window ends. Turn and service value
+   * only become REALIZED after this moment (a future booking is a reservation,
+   * not earned work). Check-in events realize immediately.
+   */
+  realizesAtMinutes: number;
   kind: TurnEventKind;
   /** Turn value added by this event (0 for check-in). */
   value: number;
@@ -62,31 +68,44 @@ export const TURN_VALUES = {
 /** Mock check-in clock — replace with a real employee check-in feed later. */
 export type TechnicianCheckIn = { technicianId: string; atMinutes: number };
 
-export function turnTotals(events: TurnEvent[]): Record<string, number> {
+/**
+ * Realized = the scheduled service window has already finished. Anything still
+ * ahead of the clock is only a reservation: 0 turn, $0 service.
+ */
+export function isRealized(event: TurnEvent, now: number | null): boolean {
+  if (now === null) return false;
+  return event.realizesAtMinutes <= now;
+}
+
+/** Realized turns per technician — future bookings contribute nothing. */
+export function turnTotals(events: TurnEvent[], now: number | null): Record<string, number> {
   const totals: Record<string, number> = {};
   for (const event of events) {
-    totals[event.technicianId] = (totals[event.technicianId] ?? 0) + event.value;
+    totals[event.technicianId] =
+      (totals[event.technicianId] ?? 0) + (isRealized(event, now) ? event.value : 0);
   }
   return totals;
 }
 
-/** "Service Total Today" per technician — service prices only, never income. */
-export function serviceTotals(events: TurnEvent[]): Record<string, number> {
+/** Realized "Service Total Today" per technician — service prices, never income. */
+export function serviceTotals(events: TurnEvent[], now: number | null): Record<string, number> {
   const totals: Record<string, number> = {};
   for (const event of events) {
     totals[event.technicianId] =
-      (totals[event.technicianId] ?? 0) + (event.serviceValue || 0);
+      (totals[event.technicianId] ?? 0) +
+      (isRealized(event, now) ? event.serviceValue || 0 : 0);
   }
   return totals;
 }
 
 /**
  * Turn buckets group "reasonably similar" turn priority. Inside one bucket the
- * Service Total becomes the tie-breaker; across buckets turn fairness wins.
+ * daily check-in order leads, and Service Total only breaks remaining ties.
  */
 export function turnBucket(total: number): number {
   return Math.floor(total + 1e-9);
 }
+
 
 export function checkInMinute(checkIns: TechnicianCheckIn[], technicianId: string): number | null {
   return checkIns.find((item) => item.technicianId === technicianId)?.atMinutes ?? null;
