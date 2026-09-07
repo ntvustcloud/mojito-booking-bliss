@@ -1,6 +1,8 @@
 import type { Appointment, TechnicianBlockout } from "@/data/manager-mock";
 import { guestServiceValue } from "@/data/manager-mock";
 import type { TechnicianCheckIn, TurnEvent } from "@/data/turn-system";
+import { guestDuration } from "@/data/schedule";
+
 
 /**
  * V1 REGRESSION TEST DAY (development dataset).
