@@ -28,6 +28,8 @@ import {
   buildBlocks,
   findConflict,
   formatMinutes,
+  guestDuration,
+
   isWaitingNow,
   snapToSlot,
   type ScheduleBlock,
