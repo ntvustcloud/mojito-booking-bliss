@@ -281,10 +281,13 @@ function seedAssignment(
   const appointment = testDayAppointments.find((item) => item.id === appointmentId)!;
   const guest = appointment.guests.find((item) => item.id === guestId)!;
   const requested = guest.requestedTechnicianId === guest.technicianId;
+  const start = guest.startMinutes ?? appointment.minutes;
   return {
     id: `turn-${guest.technicianId}-${appointmentId}-${guestId}`,
     technicianId: guest.technicianId,
-    atMinutes: guest.startMinutes ?? appointment.minutes,
+    atMinutes: start,
+    // Only counts once the scheduled service window has finished.
+    realizesAtMinutes: start + guestDuration(guest),
     kind: requested ? "Requested" : "Salon Assigned",
     value: requested ? 0.5 : 1,
     serviceValue: guestServiceValue(guest),
@@ -301,6 +304,7 @@ export const testDayTurnEvents: TurnEvent[] = [
     id: `chk-${checkIn.technicianId}`,
     technicianId: checkIn.technicianId,
     atMinutes: checkIn.atMinutes,
+    realizesAtMinutes: checkIn.atMinutes,
     kind: "Check In" as const,
     value: 0,
     serviceValue: 0,
@@ -312,6 +316,7 @@ export const testDayTurnEvents: TurnEvent[] = [
   seedAssignment("t5", "g5"),
   seedAssignment("t8", "g8"),
 ];
+
 
 /** Manual regression checklist (development only). */
 export const TEST_CHECKLIST: { id: string; label: string }[] = [
