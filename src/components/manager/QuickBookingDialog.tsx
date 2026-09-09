@@ -190,7 +190,16 @@ export function QuickBookingDialog({
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <label className="text-xs font-bold text-muted-foreground">Date</label>
+              <Input
+                type="date"
+                value={day}
+                onChange={(event) => setDay(event.target.value || TODAY_KEY)}
+                className="mt-1 h-9"
+              />
+            </div>
             <div>
               <label className="text-xs font-bold text-muted-foreground">Technician</label>
               <Select value={technicianId} onValueChange={setTechnicianId}>
