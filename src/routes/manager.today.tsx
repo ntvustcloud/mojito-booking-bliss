@@ -74,10 +74,9 @@ export const Route = createFileRoute("/manager/today")({
 });
 
 function TodayBoard() {
-  // Mock local state — replace with shared salon data later.
-  const [appointments, setAppointments] = useState<Appointment[]>(testDayAppointments);
-  const [blockouts, setBlockouts] = useState<TechnicianBlockout[]>(testDayBlockouts);
-  const [turnEvents, setTurnEvents] = useState<TurnEvent[]>(testDayTurnEvents);
+  // ONE shared scheduling state: same bookings the Calendar and kiosk use.
+  const schedule = useScheduleState();
+  const turnEvents = schedule.turnEvents;
   const [openId, setOpenId] = useState<string | null>(null);
   const [bookingOpen, setBookingOpen] = useState(false);
   const [bookingSeed, setBookingSeed] = useState<QuickBookingSeed | null>(null);

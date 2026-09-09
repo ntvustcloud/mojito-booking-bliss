@@ -52,6 +52,11 @@ export type Appointment = {
    * appointment, the check-in time for a walk-in. Never overwritten by drag.
    */
   minutes: number;
+  /**
+   * Salon-local calendar day ("YYYY-MM-DD"). Omitted means today — that keeps
+   * the prototype seed data date-free while the Calendar works on real dates.
+   */
+  date?: string;
   /** Booking title — customer name, or party name for groups. */
   title: string;
   primaryContact: string;
@@ -402,6 +407,8 @@ export type TechnicianBlockout = {
   start: number;
   end: number;
   note?: string;
+  /** Salon-local calendar day ("YYYY-MM-DD"). Omitted means today. */
+  date?: string;
 };
 
 /** Kinds that read as "temporarily away" rather than "not working". */

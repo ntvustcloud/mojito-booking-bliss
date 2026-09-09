@@ -295,6 +295,7 @@ export function ScheduleBoard({
   turnEvents,
   checkIns,
   nowMinutes,
+  planning = false,
   onOpenAppointment,
   onMove,
   onCreateAt,
@@ -308,6 +309,12 @@ export function ScheduleBoard({
   turnEvents: TurnEvent[];
   checkIns: TechnicianCheckIn[];
   nowMinutes: number | null;
+  /**
+   * Planning mode (Manager Calendar). Same grid, same cards, same overlap and
+   * block-time rules — but no live-operations layer: no turn recommendation,
+   * no waiting durations, and the queue column reads "Unassigned / Any Tech".
+   */
+  planning?: boolean;
   onOpenAppointment: (appointmentId: string) => void;
   onMove: (request: MoveRequest) => void;
   onCreateAt: (technicianId: string, start: number) => void;
@@ -411,20 +418,21 @@ export function ScheduleBoard({
 
   const suggestions = useMemo(() => {
     const map = new Map<string, TurnCandidate[]>();
+    if (planning) return map;
     for (const block of queued) map.set(block.key, candidatesFor(block));
     return map;
-  }, [queued, candidatesFor]);
+  }, [queued, candidatesFor, planning]);
 
 
   // Drag highlight: recommendation quality per technician column.
   const dragCandidates = useMemo(() => {
     const map = new Map<string, TurnCandidate>();
-    if (!dragging) return map;
+    if (!dragging || planning) return map;
     for (const candidate of candidatesFor(dragging)) {
       map.set(candidate.technicianId, candidate);
     }
     return map;
-  }, [dragging, candidatesFor]);
+  }, [dragging, candidatesFor, planning]);
 
   const dragQuality = useMemo(() => {
     const map = new Map<string, TurnQuality>();
@@ -600,10 +608,12 @@ export function ScheduleBoard({
             </div>
             <div className="sticky top-0 z-20 border-r border-b border-border bg-muted/70 px-3 py-2 backdrop-blur">
               <p className="text-[11px] font-extrabold tracking-wide uppercase text-muted-foreground">
-                Waiting / Unassigned
+                {planning ? "Unassigned · Any Tech" : "Waiting / Unassigned"}
               </p>
               <p className="text-[11px] font-bold text-status-warn-fg">
-                {waitingNow.length} waiting now · {queued.length - waitingNow.length} upcoming
+                {planning
+                  ? `${queued.length} booking${queued.length === 1 ? "" : "s"} need a technician`
+                  : `${waitingNow.length} waiting now · ${queued.length - waitingNow.length} upcoming`}
               </p>
             </div>
             {technicians.map((technician) => {
@@ -625,25 +635,41 @@ export function ScheduleBoard({
                     <p className="truncate text-sm font-extrabold text-foreground">
                       {technician.name}
                     </p>
-                    <TurnPriorityBadge
-                      technicianId={technician.id}
-                      technicianName={technician.name}
-                      position={positions[technician.id] ?? technicians.length}
-                      total={totals[technician.id] ?? 0}
-                      serviceTotal={revenues[technician.id] ?? 0}
-                      events={turnEvents}
-                      checkIns={checkIns}
-                    />
+                    {!planning && (
+                      <TurnPriorityBadge
+                        technicianId={technician.id}
+                        technicianName={technician.name}
+                        position={positions[technician.id] ?? technicians.length}
+                        total={totals[technician.id] ?? 0}
+                        serviceTotal={revenues[technician.id] ?? 0}
+                        events={turnEvents}
+                        checkIns={checkIns}
+                      />
+                    )}
                   </div>
-                  {/* Fairness at a glance: turn strip + turns · service total */}
-                  <p className="mt-1 flex items-center gap-1.5 text-[10px] font-extrabold text-muted-foreground">
-                    <TurnStrip total={totals[technician.id] ?? 0} />
-                    <span className="truncate">
-                      {formatTurns(totals[technician.id] ?? 0)}
-                      <span className="mx-1 opacity-50">·</span>
-                      {formatServiceMoney(revenues[technician.id] ?? 0)} Service
-                    </span>
-                  </p>
+                  {/* Live board: fairness at a glance. Planning: booked load. */}
+                  {planning ? (
+                    <p className="mt-1 truncate text-[10px] font-extrabold text-muted-foreground">
+                      {(() => {
+                        const mine = blocks.filter(
+                          (block) => block.technicianId === technician.id,
+                        );
+                        const minutes = mine.reduce((sum, block) => sum + block.duration, 0);
+                        return mine.length === 0
+                          ? "Open all day"
+                          : `${mine.length} booking${mine.length === 1 ? "" : "s"} · ${Math.round(minutes / 6) / 10}h booked`;
+                      })()}
+                    </p>
+                  ) : (
+                    <p className="mt-1 flex items-center gap-1.5 text-[10px] font-extrabold text-muted-foreground">
+                      <TurnStrip total={totals[technician.id] ?? 0} />
+                      <span className="truncate">
+                        {formatTurns(totals[technician.id] ?? 0)}
+                        <span className="mx-1 opacity-50">·</span>
+                        {formatServiceMoney(revenues[technician.id] ?? 0)} Service
+                      </span>
+                    </p>
+                  )}
 
                   <p className="mt-0.5 flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
                     <span
@@ -768,19 +794,23 @@ export function ScheduleBoard({
                             ? placement.hiddenCount
                             : 0
                         }
-                        waitedFor={waitingMinutes(block, nowMinutes)}
+                        waitedFor={planning ? null : waitingMinutes(block, nowMinutes)}
                         now={nowMinutes}
                         onOpen={() => onOpenAppointment(block.appointmentId)}
                         {...dragProps(block)}
                       />
                       {/* Suggestion rides on the card's bottom edge instead of
-                          taking its own row in the timeline. */}
-                      <TurnSuggestion
-                        candidates={suggestions.get(block.key) ?? []}
-                        variant={density === "min" ? "icon" : density === "tight" ? "compact" : "full"}
-                        onQuickAssign={() => quickAssign(block)}
-                        className="absolute right-1 -bottom-1 z-40 max-w-[calc(100%-0.5rem)] shadow-sm"
-                      />
+                          taking its own row in the timeline. Live board only. */}
+                      {!planning && (
+                        <TurnSuggestion
+                          candidates={suggestions.get(block.key) ?? []}
+                          variant={
+                            density === "min" ? "icon" : density === "tight" ? "compact" : "full"
+                          }
+                          onQuickAssign={() => quickAssign(block)}
+                          className="absolute right-1 -bottom-1 z-40 max-w-[calc(100%-0.5rem)] shadow-sm"
+                        />
+                      )}
 
 
                     </div>
@@ -790,7 +820,7 @@ export function ScheduleBoard({
 
               {queued.length === 0 && (
                 <p className="absolute inset-x-2 top-2 text-xs text-muted-foreground">
-                  Nobody waiting right now.
+                  {planning ? "Every booking has a technician." : "Nobody waiting right now."}
                 </p>
               )}
 
@@ -939,8 +969,10 @@ export function ScheduleBoard({
       <p className="flex items-center gap-1.5 border-t border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
         <Clock className="size-3.5" aria-hidden />
         Click an empty slot to add a booking, drag a card to reassign it (snaps to {SLOT_MINUTES}{" "}
-        minutes), and click a block-time stripe to edit it. Turn numbers and ★ suggestions are
-        recommendations — you always decide.
+        minutes), and click a block-time stripe to edit it.{" "}
+        {planning
+          ? "Future bookings reserve time only — turns and service totals are earned on the day."
+          : "Turn numbers and ★ suggestions are recommendations — you always decide."}
       </p>
     </section>
   );
