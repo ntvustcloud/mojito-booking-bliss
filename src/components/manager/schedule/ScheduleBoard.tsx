@@ -635,25 +635,41 @@ export function ScheduleBoard({
                     <p className="truncate text-sm font-extrabold text-foreground">
                       {technician.name}
                     </p>
-                    <TurnPriorityBadge
-                      technicianId={technician.id}
-                      technicianName={technician.name}
-                      position={positions[technician.id] ?? technicians.length}
-                      total={totals[technician.id] ?? 0}
-                      serviceTotal={revenues[technician.id] ?? 0}
-                      events={turnEvents}
-                      checkIns={checkIns}
-                    />
+                    {!planning && (
+                      <TurnPriorityBadge
+                        technicianId={technician.id}
+                        technicianName={technician.name}
+                        position={positions[technician.id] ?? technicians.length}
+                        total={totals[technician.id] ?? 0}
+                        serviceTotal={revenues[technician.id] ?? 0}
+                        events={turnEvents}
+                        checkIns={checkIns}
+                      />
+                    )}
                   </div>
-                  {/* Fairness at a glance: turn strip + turns · service total */}
-                  <p className="mt-1 flex items-center gap-1.5 text-[10px] font-extrabold text-muted-foreground">
-                    <TurnStrip total={totals[technician.id] ?? 0} />
-                    <span className="truncate">
-                      {formatTurns(totals[technician.id] ?? 0)}
-                      <span className="mx-1 opacity-50">·</span>
-                      {formatServiceMoney(revenues[technician.id] ?? 0)} Service
-                    </span>
-                  </p>
+                  {/* Live board: fairness at a glance. Planning: booked load. */}
+                  {planning ? (
+                    <p className="mt-1 truncate text-[10px] font-extrabold text-muted-foreground">
+                      {(() => {
+                        const mine = blocks.filter(
+                          (block) => block.technicianId === technician.id,
+                        );
+                        const minutes = mine.reduce((sum, block) => sum + block.duration, 0);
+                        return mine.length === 0
+                          ? "Open all day"
+                          : `${mine.length} booking${mine.length === 1 ? "" : "s"} · ${Math.round(minutes / 6) / 10}h booked`;
+                      })()}
+                    </p>
+                  ) : (
+                    <p className="mt-1 flex items-center gap-1.5 text-[10px] font-extrabold text-muted-foreground">
+                      <TurnStrip total={totals[technician.id] ?? 0} />
+                      <span className="truncate">
+                        {formatTurns(totals[technician.id] ?? 0)}
+                        <span className="mx-1 opacity-50">·</span>
+                        {formatServiceMoney(revenues[technician.id] ?? 0)} Service
+                      </span>
+                    </p>
+                  )}
 
                   <p className="mt-0.5 flex items-center gap-1 text-[11px] font-bold text-muted-foreground">
                     <span
