@@ -794,19 +794,23 @@ export function ScheduleBoard({
                             ? placement.hiddenCount
                             : 0
                         }
-                        waitedFor={waitingMinutes(block, nowMinutes)}
+                        waitedFor={planning ? null : waitingMinutes(block, nowMinutes)}
                         now={nowMinutes}
                         onOpen={() => onOpenAppointment(block.appointmentId)}
                         {...dragProps(block)}
                       />
                       {/* Suggestion rides on the card's bottom edge instead of
-                          taking its own row in the timeline. */}
-                      <TurnSuggestion
-                        candidates={suggestions.get(block.key) ?? []}
-                        variant={density === "min" ? "icon" : density === "tight" ? "compact" : "full"}
-                        onQuickAssign={() => quickAssign(block)}
-                        className="absolute right-1 -bottom-1 z-40 max-w-[calc(100%-0.5rem)] shadow-sm"
-                      />
+                          taking its own row in the timeline. Live board only. */}
+                      {!planning && (
+                        <TurnSuggestion
+                          candidates={suggestions.get(block.key) ?? []}
+                          variant={
+                            density === "min" ? "icon" : density === "tight" ? "compact" : "full"
+                          }
+                          onQuickAssign={() => quickAssign(block)}
+                          className="absolute right-1 -bottom-1 z-40 max-w-[calc(100%-0.5rem)] shadow-sm"
+                        />
+                      )}
 
 
                     </div>
@@ -816,7 +820,7 @@ export function ScheduleBoard({
 
               {queued.length === 0 && (
                 <p className="absolute inset-x-2 top-2 text-xs text-muted-foreground">
-                  Nobody waiting right now.
+                  {planning ? "Every booking has a technician." : "Nobody waiting right now."}
                 </p>
               )}
 
