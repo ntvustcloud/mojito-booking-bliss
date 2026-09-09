@@ -969,8 +969,10 @@ export function ScheduleBoard({
       <p className="flex items-center gap-1.5 border-t border-border bg-muted/40 px-3 py-2 text-[11px] font-semibold text-muted-foreground">
         <Clock className="size-3.5" aria-hidden />
         Click an empty slot to add a booking, drag a card to reassign it (snaps to {SLOT_MINUTES}{" "}
-        minutes), and click a block-time stripe to edit it. Turn numbers and ★ suggestions are
-        recommendations — you always decide.
+        minutes), and click a block-time stripe to edit it.{" "}
+        {planning
+          ? "Future bookings reserve time only — turns and service totals are earned on the day."
+          : "Turn numbers and ★ suggestions are recommendations — you always decide."}
       </p>
     </section>
   );
