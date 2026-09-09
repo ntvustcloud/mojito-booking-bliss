@@ -45,12 +45,16 @@ export type QuickBookingDraft = {
   technicianId: string;
   /** Anchor time: check-in time for a walk-in, booked time for an appointment. */
   startMinutes: number;
+  /** Salon-local day the booking belongs to ("YYYY-MM-DD"). */
+  dateKey: string;
 };
 
 export type QuickBookingSeed = {
   technicianId?: string;
   start?: number;
   type?: BookingType;
+  /** Pre-filled day — the Calendar seeds the date of the clicked column. */
+  dateKey?: string;
 };
 
 const timeOptions = () => {
