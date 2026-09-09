@@ -418,20 +418,21 @@ export function ScheduleBoard({
 
   const suggestions = useMemo(() => {
     const map = new Map<string, TurnCandidate[]>();
+    if (planning) return map;
     for (const block of queued) map.set(block.key, candidatesFor(block));
     return map;
-  }, [queued, candidatesFor]);
+  }, [queued, candidatesFor, planning]);
 
 
   // Drag highlight: recommendation quality per technician column.
   const dragCandidates = useMemo(() => {
     const map = new Map<string, TurnCandidate>();
-    if (!dragging) return map;
+    if (!dragging || planning) return map;
     for (const candidate of candidatesFor(dragging)) {
       map.set(candidate.technicianId, candidate);
     }
     return map;
-  }, [dragging, candidatesFor]);
+  }, [dragging, candidatesFor, planning]);
 
   const dragQuality = useMemo(() => {
     const map = new Map<string, TurnQuality>();
