@@ -321,7 +321,16 @@ export function QuickBookingDialog({
             className="rounded-lg"
             disabled={serviceIds.length === 0}
             onClick={() => {
-              onSubmit({ type, name, phone, note, serviceIds, technicianId, startMinutes });
+              onSubmit({
+                type,
+                name,
+                phone,
+                note,
+                serviceIds,
+                technicianId,
+                startMinutes,
+                dateKey: day,
+              });
               onOpenChange(false);
             }}
           >
