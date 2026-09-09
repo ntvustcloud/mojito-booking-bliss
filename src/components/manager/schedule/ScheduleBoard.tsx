@@ -295,6 +295,7 @@ export function ScheduleBoard({
   turnEvents,
   checkIns,
   nowMinutes,
+  planning = false,
   onOpenAppointment,
   onMove,
   onCreateAt,
@@ -308,6 +309,12 @@ export function ScheduleBoard({
   turnEvents: TurnEvent[];
   checkIns: TechnicianCheckIn[];
   nowMinutes: number | null;
+  /**
+   * Planning mode (Manager Calendar). Same grid, same cards, same overlap and
+   * block-time rules — but no live-operations layer: no turn recommendation,
+   * no waiting durations, and the queue column reads "Unassigned / Any Tech".
+   */
+  planning?: boolean;
   onOpenAppointment: (appointmentId: string) => void;
   onMove: (request: MoveRequest) => void;
   onCreateAt: (technicianId: string, start: number) => void;
