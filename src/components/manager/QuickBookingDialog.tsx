@@ -28,6 +28,7 @@ import {
   formatMinutes,
   snapToSlot,
 } from "@/data/schedule";
+import { TODAY_KEY } from "@/data/calendar";
 import { cn } from "@/lib/utils";
 
 /**
@@ -68,14 +69,18 @@ export function QuickBookingDialog({
   onOpenChange,
   seed,
   nowMinutes,
+  defaultDateKey,
   onSubmit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   seed: QuickBookingSeed | null;
   nowMinutes: number | null;
+  /** Day the screen is showing — Calendar passes the selected date. */
+  defaultDateKey?: string;
   onSubmit: (draft: QuickBookingDraft) => void;
 }) {
+  const fallbackDate = defaultDateKey ?? TODAY_KEY;
   const defaultStart = snapToSlot(nowMinutes ?? DAY_START_MINUTES);
   const [type, setType] = useState<BookingType>("Walk-In");
   const [name, setName] = useState("");
@@ -83,21 +88,31 @@ export function QuickBookingDialog({
   const [note, setNote] = useState("");
   const [technicianId, setTechnicianId] = useState("any");
   const [startMinutes, setStartMinutes] = useState(defaultStart);
+  const [day, setDay] = useState(fallbackDate);
   const [serviceIds, setServiceIds] = useState<string[]>([]);
   const [query, setQuery] = useState("");
 
-  // Re-seed each time the dialog opens (slot click pre-fills tech + time).
+  // Re-seed each time the dialog opens (slot click pre-fills tech + date + time).
   useEffect(() => {
     if (!open) return;
-    setType(seed?.type ?? (seed?.start !== undefined ? "Appointment" : "Walk-In"));
+    const seededDate = seed?.dateKey ?? fallbackDate;
+    setType(
+      seed?.type ??
+        (seededDate !== TODAY_KEY
+          ? "Appointment"
+          : seed?.start !== undefined
+            ? "Appointment"
+            : "Walk-In"),
+    );
     setTechnicianId(seed?.technicianId ?? "any");
     setStartMinutes(seed?.start ?? snapToSlot(nowMinutes ?? DAY_START_MINUTES));
+    setDay(seededDate);
     setName("");
     setPhone("");
     setNote("");
     setServiceIds([]);
     setQuery("");
-  }, [open, seed, nowMinutes]);
+  }, [open, seed, nowMinutes, fallbackDate]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
