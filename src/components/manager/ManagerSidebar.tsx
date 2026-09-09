@@ -19,7 +19,7 @@ type NavItem = {
 
 const MAIN_NAV: NavItem[] = [
   { label: "Today", icon: LayoutDashboard, to: "/manager/today" },
-  { label: "Calendar", icon: CalendarDays },
+  { label: "Calendar", icon: CalendarDays, to: "/manager/calendar" },
   { label: "Appointments", icon: ClipboardList },
   { label: "Customers", icon: Users },
   { label: "Staff", icon: UsersRound },
