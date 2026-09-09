@@ -608,10 +608,12 @@ export function ScheduleBoard({
             </div>
             <div className="sticky top-0 z-20 border-r border-b border-border bg-muted/70 px-3 py-2 backdrop-blur">
               <p className="text-[11px] font-extrabold tracking-wide uppercase text-muted-foreground">
-                Waiting / Unassigned
+                {planning ? "Unassigned · Any Tech" : "Waiting / Unassigned"}
               </p>
               <p className="text-[11px] font-bold text-status-warn-fg">
-                {waitingNow.length} waiting now · {queued.length - waitingNow.length} upcoming
+                {planning
+                  ? `${queued.length} booking${queued.length === 1 ? "" : "s"} need a technician`
+                  : `${waitingNow.length} waiting now · ${queued.length - waitingNow.length} upcoming`}
               </p>
             </div>
             {technicians.map((technician) => {
