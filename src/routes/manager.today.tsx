@@ -530,6 +530,7 @@ function TodayBoard() {
         onOpenChange={setBookingOpen}
         seed={bookingSeed}
         nowMinutes={nowMinutes}
+        defaultDateKey={viewedKey}
         onSubmit={handleBooking}
       />
 
