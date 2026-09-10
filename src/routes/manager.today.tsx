@@ -441,9 +441,7 @@ function TodayBoard() {
         <div className="flex flex-wrap items-center gap-2">
           <TestDayPanel
             onReset={() => {
-              setAppointments(testDayAppointments);
-              setBlockouts(testDayBlockouts);
-              setTurnEvents(testDayTurnEvents);
+              resetSchedule();
               setOpenId(null);
               toast.success("V1 test day reset");
             }}
