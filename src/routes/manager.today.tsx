@@ -180,30 +180,6 @@ function TodayBoard() {
 
   const active = appointments.find((appointment) => appointment.id === openId) ?? null;
 
-  /** `startMinutes: undefined` clears a placement (card returns to its anchor). */
-  type GuestPatch = Omit<Partial<BookingGuest>, "startMinutes"> & {
-    startMinutes?: number | undefined;
-  };
-
-  function updateGuest(appointmentId: string, guestId: string, patch: GuestPatch) {
-    setAppointments((current) =>
-      current.map((appointment) =>
-        appointment.id !== appointmentId
-          ? appointment
-          : {
-              ...appointment,
-              guests: appointment.guests.map((guest) => {
-                if (guest.id !== guestId) return guest;
-                const next: BookingGuest = { ...guest, ...patch } as BookingGuest;
-                if ("startMinutes" in patch && patch.startMinutes === undefined) {
-                  delete next.startMinutes;
-                }
-                return next;
-              }),
-            },
-      ),
-    );
-  }
 
   /**
    * Turn + Service ledger. Every assignment writes ONE event keyed by
