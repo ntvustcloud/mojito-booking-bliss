@@ -343,6 +343,7 @@ function TodayBoard() {
         id,
         time: formatMinutes(minutes),
         minutes,
+        date: draft.dateKey,
         title: name,
         primaryContact: name,
         phone: draft.phone.trim() || "—",
