@@ -246,17 +246,10 @@ function TodayBoard() {
     });
   }
 
-  /** Drop every fairness event tied to one guest (cancel / restore flows). */
-  function clearGuestEvents(appointmentId: string, guestId: string) {
-    setTurnEvents((current) =>
-      current.filter((event) => event.guestKey !== `${appointmentId}:${guestId}`),
-    );
-  }
-
   /** Applies a move and offers Undo restoring BOTH schedule and ledger. */
   function applyMove(request: MoveRequest) {
     const { block, technicianId, start } = request;
-    const previousAppointments = appointments;
+    const previousAppointments = schedule.appointments;
     const previousEvents = turnEvents;
 
     updateGuest(
