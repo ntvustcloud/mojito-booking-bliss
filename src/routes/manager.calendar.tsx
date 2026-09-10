@@ -353,7 +353,7 @@ function CalendarPage() {
             turnEvents={schedule.turnEvents}
             checkIns={[]}
             planning={!isTodayKey(selected)}
-            nowMinutes={isTodayKey(selected) ? null : null}
+            nowMinutes={null}
             onOpenAppointment={(id) => setOpenId(id)}
             onMove={handleMove}
             onCreateAt={(technicianId, start) => {

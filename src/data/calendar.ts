@@ -410,8 +410,8 @@ function bookingsForDay(key: DateKey): Appointment[] {
   return result;
 }
 
-/** Seeded future book of business: tomorrow through ~10 weeks out. */
-export function seedFutureAppointments(days = 70): Appointment[] {
+/** Seeded future book of business: tomorrow through ~6 months out. */
+export function seedFutureAppointments(days = 180): Appointment[] {
   const list: Appointment[] = [];
   for (let offset = 1; offset <= days; offset += 1) {
     list.push(...bookingsForDay(addDaysKey(TODAY_KEY, offset)));
@@ -420,7 +420,7 @@ export function seedFutureAppointments(days = 70): Appointment[] {
 }
 
 /** A few planned breaks / personal blocks on future days. */
-export function seedFutureBlockouts(days = 70): TechnicianBlockout[] {
+export function seedFutureBlockouts(days = 180): TechnicianBlockout[] {
   const list: TechnicianBlockout[] = [];
   for (let offset = 1; offset <= days; offset += 1) {
     const key = addDaysKey(TODAY_KEY, offset);
