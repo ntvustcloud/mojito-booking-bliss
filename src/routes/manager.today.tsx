@@ -45,12 +45,22 @@ import {
 import { technicianRows } from "@/data/technician-state";
 import { arrivedGuests, useCheckIns, walkInAppointments } from "@/data/check-in-store";
 import { turnValueFor, type TurnEvent } from "@/data/turn-system";
+import { testDayCheckIns } from "@/data/regression-day";
 import {
-  testDayAppointments,
-  testDayBlockouts,
-  testDayCheckIns,
-  testDayTurnEvents,
-} from "@/data/regression-day";
+  clearGuestEvents,
+  resetSchedule,
+  setAppointments,
+  setBlockouts,
+  setTurnEvents,
+  updateGuest,
+  useScheduleState,
+} from "@/data/schedule-store";
+import {
+  TODAY_KEY,
+  addDaysKey,
+  appointmentsOn,
+  blockoutsOn,
+} from "@/data/calendar";
 import { TestDayPanel } from "@/components/manager/schedule/TestDayPanel";
 
 export const Route = createFileRoute("/manager/today")({
