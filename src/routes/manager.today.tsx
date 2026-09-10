@@ -150,6 +150,17 @@ function TodayBoard() {
     );
   }, [dayOffset]);
 
+  // The board always shows one salon day out of the shared schedule.
+  const viewedKey = useMemo(() => addDaysKey(TODAY_KEY, dayOffset), [dayOffset]);
+  const appointments = useMemo(
+    () => appointmentsOn(schedule.appointments, viewedKey),
+    [schedule.appointments, viewedKey],
+  );
+  const blockouts = useMemo(
+    () => blockoutsOn(schedule.blockouts, viewedKey),
+    [schedule.blockouts, viewedKey],
+  );
+
   const boardNow = dayOffset === 0 ? nowMinutes : null;
   const rows = useMemo(
     () => technicianRows(appointments, blockouts, boardNow),
