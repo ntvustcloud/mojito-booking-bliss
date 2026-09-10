@@ -17,6 +17,7 @@ import { Route as GalleryRouteImport } from './routes/gallery'
 import { Route as ManagerRouteImport } from './routes/manager'
 import { Route as ServicesRouteImport } from './routes/services'
 import { Route as ManagerIndexRouteImport } from './routes/manager.index'
+import { Route as ManagerCalendarRouteImport } from './routes/manager.calendar'
 import { Route as ManagerTodayRouteImport } from './routes/manager.today'
 
 const IndexRoute = IndexRouteImport.update({
@@ -59,6 +60,11 @@ const ManagerIndexRoute = ManagerIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ManagerRoute,
 } as any)
+const ManagerCalendarRoute = ManagerCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
+  getParentRoute: () => ManagerRoute,
+} as any)
 const ManagerTodayRoute = ManagerTodayRouteImport.update({
   id: '/today',
   path: '/today',
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/gallery': typeof GalleryRoute
   '/manager': typeof ManagerRouteWithChildren
   '/services': typeof ServicesRoute
+  '/manager/calendar': typeof ManagerCalendarRoute
   '/manager/today': typeof ManagerTodayRoute
   '/manager/': typeof ManagerIndexRoute
 }
@@ -83,6 +90,7 @@ export interface FileRoutesByTo {
   '/check-in': typeof CheckInRoute
   '/gallery': typeof GalleryRoute
   '/services': typeof ServicesRoute
+  '/manager/calendar': typeof ManagerCalendarRoute
   '/manager/today': typeof ManagerTodayRoute
   '/manager': typeof ManagerIndexRoute
 }
@@ -95,6 +103,7 @@ export interface FileRoutesById {
   '/gallery': typeof GalleryRoute
   '/manager': typeof ManagerRouteWithChildren
   '/services': typeof ServicesRoute
+  '/manager/calendar': typeof ManagerCalendarRoute
   '/manager/today': typeof ManagerTodayRoute
   '/manager/': typeof ManagerIndexRoute
 }
@@ -108,6 +117,7 @@ export interface FileRouteTypes {
     | '/gallery'
     | '/manager'
     | '/services'
+    | '/manager/calendar'
     | '/manager/today'
     | '/manager/'
   fileRoutesByTo: FileRoutesByTo
@@ -118,6 +128,7 @@ export interface FileRouteTypes {
     | '/check-in'
     | '/gallery'
     | '/services'
+    | '/manager/calendar'
     | '/manager/today'
     | '/manager'
   id:
@@ -129,6 +140,7 @@ export interface FileRouteTypes {
     | '/gallery'
     | '/manager'
     | '/services'
+    | '/manager/calendar'
     | '/manager/today'
     | '/manager/'
   fileRoutesById: FileRoutesById
@@ -201,6 +213,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManagerIndexRouteImport
       parentRoute: typeof ManagerRoute
     }
+    '/manager/calendar': {
+      id: '/manager/calendar'
+      path: '/calendar'
+      fullPath: '/manager/calendar'
+      preLoaderRoute: typeof ManagerCalendarRouteImport
+      parentRoute: typeof ManagerRoute
+    }
     '/manager/today': {
       id: '/manager/today'
       path: '/today'
@@ -212,11 +231,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface ManagerRouteChildren {
+  ManagerCalendarRoute: typeof ManagerCalendarRoute
   ManagerTodayRoute: typeof ManagerTodayRoute
   ManagerIndexRoute: typeof ManagerIndexRoute
 }
 
 const ManagerRouteChildren: ManagerRouteChildren = {
+  ManagerCalendarRoute: ManagerCalendarRoute,
   ManagerTodayRoute: ManagerTodayRoute,
   ManagerIndexRoute: ManagerIndexRoute,
 }

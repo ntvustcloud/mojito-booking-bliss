@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { salon } from "@/data/salon";
-import { technicianBlockouts, todayAppointments, type Appointment } from "@/data/manager-mock";
+import { type Appointment } from "@/data/manager-mock";
+import { useScheduleState } from "@/data/schedule-store";
+import { TODAY_KEY, appointmentsOn, blockoutsOn } from "@/data/calendar";
 import { buildBlocks, isQueued } from "@/data/schedule";
 import { addCheckIn, useCheckIns, walkInAppointments } from "@/data/check-in-store";
 import {
@@ -101,9 +103,14 @@ function CheckInKiosk() {
   }, []);
 
   /** Same day the manager sees: seeded bookings + kiosk arrivals. */
+  const schedule = useScheduleState();
   const appointments: Appointment[] = useMemo(
-    () => [...todayAppointments, ...walkInAppointments(records)],
-    [records],
+    () => [...appointmentsOn(schedule.appointments, TODAY_KEY), ...walkInAppointments(records)],
+    [schedule.appointments, records],
+  );
+  const blockouts = useMemo(
+    () => blockoutsOn(schedule.blockouts, TODAY_KEY),
+    [schedule.blockouts],
   );
 
   const queueAhead = useMemo(() => {
@@ -145,11 +152,11 @@ function CheckInKiosk() {
   const estimateBase = useMemo(
     () => ({
       appointments,
-      blockouts: technicianBlockouts,
+      blockouts,
       now: nowMinutes ?? 9 * 60,
       queueAhead,
     }),
-    [appointments, nowMinutes, queueAhead],
+    [appointments, blockouts, nowMinutes, queueAhead],
   );
 
   function lookupByPhone() {

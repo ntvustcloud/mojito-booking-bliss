@@ -45,12 +45,22 @@ import {
 import { technicianRows } from "@/data/technician-state";
 import { arrivedGuests, useCheckIns, walkInAppointments } from "@/data/check-in-store";
 import { turnValueFor, type TurnEvent } from "@/data/turn-system";
+import { testDayCheckIns } from "@/data/regression-day";
 import {
-  testDayAppointments,
-  testDayBlockouts,
-  testDayCheckIns,
-  testDayTurnEvents,
-} from "@/data/regression-day";
+  clearGuestEvents,
+  resetSchedule,
+  setAppointments,
+  setBlockouts,
+  setTurnEvents,
+  updateGuest,
+  useScheduleState,
+} from "@/data/schedule-store";
+import {
+  TODAY_KEY,
+  addDaysKey,
+  appointmentsOn,
+  blockoutsOn,
+} from "@/data/calendar";
 import { TestDayPanel } from "@/components/manager/schedule/TestDayPanel";
 
 export const Route = createFileRoute("/manager/today")({
@@ -140,6 +150,17 @@ function TodayBoard() {
     );
   }, [dayOffset]);
 
+  // The board always shows one salon day out of the shared schedule.
+  const viewedKey = useMemo(() => addDaysKey(TODAY_KEY, dayOffset), [dayOffset]);
+  const appointments = useMemo(
+    () => appointmentsOn(schedule.appointments, viewedKey),
+    [schedule.appointments, viewedKey],
+  );
+  const blockouts = useMemo(
+    () => blockoutsOn(schedule.blockouts, viewedKey),
+    [schedule.blockouts, viewedKey],
+  );
+
   const boardNow = dayOffset === 0 ? nowMinutes : null;
   const rows = useMemo(
     () => technicianRows(appointments, blockouts, boardNow),
@@ -159,30 +180,6 @@ function TodayBoard() {
 
   const active = appointments.find((appointment) => appointment.id === openId) ?? null;
 
-  /** `startMinutes: undefined` clears a placement (card returns to its anchor). */
-  type GuestPatch = Omit<Partial<BookingGuest>, "startMinutes"> & {
-    startMinutes?: number | undefined;
-  };
-
-  function updateGuest(appointmentId: string, guestId: string, patch: GuestPatch) {
-    setAppointments((current) =>
-      current.map((appointment) =>
-        appointment.id !== appointmentId
-          ? appointment
-          : {
-              ...appointment,
-              guests: appointment.guests.map((guest) => {
-                if (guest.id !== guestId) return guest;
-                const next: BookingGuest = { ...guest, ...patch } as BookingGuest;
-                if ("startMinutes" in patch && patch.startMinutes === undefined) {
-                  delete next.startMinutes;
-                }
-                return next;
-              }),
-            },
-      ),
-    );
-  }
 
   /**
    * Turn + Service ledger. Every assignment writes ONE event keyed by
@@ -225,17 +222,10 @@ function TodayBoard() {
     });
   }
 
-  /** Drop every fairness event tied to one guest (cancel / restore flows). */
-  function clearGuestEvents(appointmentId: string, guestId: string) {
-    setTurnEvents((current) =>
-      current.filter((event) => event.guestKey !== `${appointmentId}:${guestId}`),
-    );
-  }
-
   /** Applies a move and offers Undo restoring BOTH schedule and ledger. */
   function applyMove(request: MoveRequest) {
     const { block, technicianId, start } = request;
-    const previousAppointments = appointments;
+    const previousAppointments = schedule.appointments;
     const previousEvents = turnEvents;
 
     updateGuest(
@@ -322,6 +312,7 @@ function TodayBoard() {
         id,
         time: formatMinutes(minutes),
         minutes,
+        date: draft.dateKey,
         title: name,
         primaryContact: name,
         phone: draft.phone.trim() || "—",
@@ -450,9 +441,7 @@ function TodayBoard() {
         <div className="flex flex-wrap items-center gap-2">
           <TestDayPanel
             onReset={() => {
-              setAppointments(testDayAppointments);
-              setBlockouts(testDayBlockouts);
-              setTurnEvents(testDayTurnEvents);
+              resetSchedule();
               setOpenId(null);
               toast.success("V1 test day reset");
             }}
@@ -541,6 +530,7 @@ function TodayBoard() {
         onOpenChange={setBookingOpen}
         seed={bookingSeed}
         nowMinutes={nowMinutes}
+        defaultDateKey={viewedKey}
         onSubmit={handleBooking}
       />
 
