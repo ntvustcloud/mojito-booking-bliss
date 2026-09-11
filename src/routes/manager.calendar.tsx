@@ -352,7 +352,7 @@ function CalendarPage() {
             blockouts={dayBlockouts}
             turnEvents={schedule.turnEvents}
             checkIns={[]}
-            planning={!isTodayKey(selected)}
+            planning
             nowMinutes={null}
             onOpenAppointment={(id) => setOpenId(id)}
             onMove={handleMove}
